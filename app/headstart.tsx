@@ -431,6 +431,25 @@ function HistoryControl({period,onChange,weekEnding,onWeek,now,range}:{period:Hi
     {period==='custom'&&<label className="history-custom"><span>Week ending</span><input aria-label="Week ending" type="date" max={dayKey(now)} value={weekEnding||dayKey(now)} onChange={e=>onWeek(e.target.value)}/></label>}
   </div>;
 }
+function HomeOrientation(){
+  return <div className="home-orientation">
+    <section className="concept-note" aria-labelledby="concept-note-title">
+      <h2 id="concept-note-title"><BookOpen size={17} aria-hidden="true"/>Concept note</h2>
+      <p>Headstart helps teammates start work with fewer follow-ups. Given a task brief, it predicts what the assignee might ask and suggests answers or people to ask. The sender reviews what goes into the handoff.</p>
+      <p><strong>Use case.</strong> Shashank hands Devarshi a search CTR analysis across time zones. Sharing the date range, device split, and expected output up front lets Devarshi start before their working hours overlap.</p>
+    </section>
+    <details className="demo-guide" open>
+      <summary><span><FileText size={17} aria-hidden="true"/>Demo guide</span><ChevronDown size={17} aria-hidden="true"/></summary>
+      <ol>
+        <li><strong>Predict.</strong> In <b>Viewing as</b>, select Shashank. Click <b>Assign new task</b>, choose Devarshi, click <b>Use sample task</b>, then <b>Predict questions</b>.</li>
+        <li><strong>Review and send.</strong> Check a suggested answer. Choose <b>Accept this answer</b>, edit it, or nominate a teammate who can clarify. Click <b>Send handoff</b>.</li>
+        <li><strong>Try the analyst view.</strong> Switch to Devarshi, open the new handoff in <b>My tasks</b>, and read <b>Questions shared at handoff</b>. Try a follow-up or click <b>Send for acceptance</b>.</li>
+        <li><strong>Close the loop.</strong> If you submitted the work, switch back to Shashank. Open it in <b>Awaiting acceptance</b> and choose <b>Accept</b> or <b>Send back</b>.</li>
+      </ol>
+    </details>
+  </div>;
+}
+
 function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,historyControl,period}:{s:State;me:Person;rows:Task[];drafts:Task[];composer?:ComposeDraft;open:(id:string)=>void;onAssign:()=>void;onOpenItems:()=>void;historyControl:ReactNode;period:HistoryPeriod}){
   const [recipient,setRecipient]=useState('');
   const [showAll,setShowAll]=useState(false);
@@ -464,6 +483,7 @@ function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,histor
       <div><h1>{me.canAssign?'Head start the anticipation engine':'Your tasks arrive with answers already in place'}</h1><p>{me.canAssign?'Add a task and see what your reportee may ask next. Send the clarifying answers with the work.':'Open a handoff to review the answers and see who can help with follow-up questions.'}</p></div>
       <div className="overview-actions">{historyControl}</div>
     </div>
+    <HomeOrientation/>
     <div className="home-workspace">
       {me.canAssign&&<div className="prediction-launch">
         <div className="launch-copy">

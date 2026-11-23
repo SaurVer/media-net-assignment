@@ -876,6 +876,62 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
 .home-dashboard .dashboard-title { margin-bottom:17px; }
 .dashboard-title h1 { font-size:clamp(32px,4vw,54px); font-weight:710; line-height:1.04; letter-spacing:-.062em; color:var(--plum-ink); }
 .dashboard-title p { max-width:66ch; line-height:1.45; font-size:15px; color:#63515d; }
+.home-orientation {
+  display:grid;
+  grid-template-columns:minmax(0,2fr) minmax(0,3fr);
+  gap:12px;
+  margin:0 0 16px;
+  align-items:start;
+}
+.home-orientation>section,.home-orientation>details {
+  border:1px solid var(--plum-line);
+  border-radius:13px;
+  background:#fffdfb;
+  color:#63515d;
+  font-size:13px;
+  line-height:1.55;
+}
+.home-orientation .concept-note {
+  padding:13px 16px;
+  background:#faf4f7;
+  align-self:stretch;
+}
+.concept-note h2,.demo-guide summary {
+  color:var(--plum-ink);
+  font-size:16px;
+  font-weight:650;
+}
+.concept-note h2,.demo-guide summary>span { display:flex; align-items:center; gap:8px; }
+.concept-note p { margin-top:7px; }
+.home-orientation strong,.home-orientation b { color:var(--plum-ink); }
+.demo-guide summary {
+  padding:11px 15px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  list-style:none;
+  cursor:pointer;
+  border-radius:12px;
+}
+.demo-guide summary::-webkit-details-marker { display:none; }
+.demo-guide summary:focus-visible { outline:2px solid var(--plum-primary); outline-offset:-3px; }
+.demo-guide[open] summary>svg { transform:rotate(180deg); }
+.demo-guide ol {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px 24px;
+  padding:0 15px 12px 34px;
+  margin:0;
+  list-style:decimal;
+}
+.demo-guide li::marker { color:var(--plum-primary); font-weight:700; }
+@media(max-width:1050px) {
+  .home-orientation { grid-template-columns:1fr; }
+}
+@media(max-width:600px) {
+  .demo-guide ol { grid-template-columns:1fr; }
+}
 .home-workspace { display:grid; grid-template-columns:minmax(0,1fr) minmax(245px,280px); grid-template-areas:"launch insights" "recent insights"; grid-template-rows:auto 1fr; gap:16px; align-items:start; }
 .home-workspace:not(:has(.prediction-launch)) { grid-template-areas:"recent insights"; grid-template-rows:auto; }
 .home-workspace .prediction-launch { grid-area:launch; margin:0; background:radial-gradient(ellipse at 12% 0%,#fff9f0,transparent 67%),var(--plum-soft); border-color:var(--plum-line); padding:clamp(16px,2.4vw,31px); gap:16px; }
