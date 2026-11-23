@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect,useRef,useState,type FormEvent,type ReactNode} from 'react';
-import {Activity,ArrowLeft,ArrowRight,Bell,BookOpen,Check,CheckCircle2,ChevronDown,ChevronRight,Clock3,Code2,Command,CornerDownRight,House,FileCheck2,FileText,Inbox,Layers3,Mic,Plus,RotateCcw,Send,Settings2,Sparkles,Users,MessageSquare,CalendarClock,CircleHelp,X,type LucideIcon} from 'lucide-react';
+import {Activity,ArrowLeft,ArrowRight,Bell,BookOpen,Check,CheckCircle2,ChevronDown,ChevronRight,Clock3,Code2,Command,CornerDownRight,House,FileCheck2,FileText,Inbox,Layers3,Mic,Plus,RotateCcw,Send,Settings2,Sparkles,Users,MessageSquare,CalendarClock,Play,X,type LucideIcon} from 'lucide-react';
 import {ensurePredictionHistory,seed} from '../data/seed';
 import {agenda,isOutstanding,isResolved,nominationOpen,librarySearch,listTasks} from '../lib/engine';
 import {endpoints} from '../lib/api-list';
@@ -13,6 +13,8 @@ import {advance,dayKey,localAt,nextStart,onShift,shiftDay,shortTime,zone} from '
 import {Mark} from './mark';
 
 type Page='home'|'outbox'|'review'|'sent'|'agenda'|'acceptance'|'tasks'|'questions'|'people'|'library'|'metrics'|'settings'|'api'|'detail';
+type DemoStep='assign'|'brief'|'predict'|'review';
+type HelpPanel='concept'|'demo';
 type ComposeDraft={text:string;assigneeId:string;urgent:boolean;createdAt?:string};
 type ContextDraft={text?:string;nomineeId?:string;nomineeIds?:string[];requiresVerification?:boolean;verifySuggested?:boolean};
 type AdditionalAnswerDraft={id:string;text:string};
@@ -60,8 +62,8 @@ function Avatar({p,online,small=false}:{p:Person;online?:boolean;small?:boolean}
   </span>;
 }
 function roleLabel(p:Person){return roleLevel(p)==='lead'?`Team lead · ${p.title}`:p.title;}
-function Button({children,onClick,kind='default',disabled=false,type='button',className=''}:{children:ReactNode;onClick?:()=>void;kind?:string;disabled?:boolean;type?:'button'|'submit';className?:string}){
-  return <button type={type} onClick={onClick} disabled={disabled} className={`button ${kind} ${className}`}>{children}</button>;
+function Button({children,onClick,kind='default',disabled=false,type='button',className='',id,describedBy}:{children:ReactNode;onClick?:()=>void;kind?:string;disabled?:boolean;type?:'button'|'submit';className?:string;id?:string;describedBy?:string}){
+  return <button id={id} aria-describedby={describedBy} type={type} onClick={onClick} disabled={disabled} className={`button ${kind} ${className}`}>{children}</button>;
 }
 function Chip({children,tone=''}:{children:ReactNode;tone?:string}){return <span className={`chip ${tone}`}>{children}</span>;}
 function PersonTag({p,now,compact=false}:{p:Person;now:string;compact?:boolean}){
@@ -190,6 +192,9 @@ export default function Headstart(){
   const [viewer,setViewer]=useState('shashank');
   const [page,setPage]=useState<Page>('home');
   const [composerOpen,setComposerOpen]=useState(false);
+  const [help,setHelp]=useState<HelpPanel|null>(null);
+  const [demo,setDemo]=useState<DemoStep|null>(null);
+  const stopDemo=()=>setDemo(null);
   const [period,setPeriod]=useState<HistoryPeriod>('last7');
   const [weekEnding,setWeekEnding]=useState('');
   const [detail,setDetail]=useState('');
@@ -293,10 +298,16 @@ export default function Headstart(){
     }catch(error){setGlobalError(error instanceof Error?error.message:'The action could not be completed.');return undefined;}
     finally{lock.current=false;}
   }
-  function go(next:Page){setPage(next);setComposerOpen(false);setNoticeOpen(false);setClockOpen(false);setGlobalError('');window.scrollTo(0,0);}
+  function go(next:Page,keepDemo=false){if(!keepDemo)stopDemo();setPage(next);setComposerOpen(false);setNoticeOpen(false);setClockOpen(false);setGlobalError('');window.scrollTo(0,0);}
   function viewAs(p:Person){
     if(!lock.current){live.current=snapshotAt(live.current);setState(live.current);}
     setTeam(p.teamId);setViewer(p.id);setDetail('');go('home');
+  }
+  function startDemo(){
+    setHelp(null);
+    if(!me.canAssign)viewAs(getPersona(state,'shashank'));
+    else go('home');
+    setDemo('assign');
   }
   function selectTeam(id:string){
     const p=state.people.find(p=>p.teamId===id&&p.canAssign);
@@ -319,6 +330,7 @@ export default function Headstart(){
     setComposerOpen(false);
     setComposers(previous=>Object.fromEntries(Object.entries(previous).filter(([key])=>key!==viewer)));
     openDraft(id,true);
+    setDemo(step=>step==='brief'||step==='predict'?'review':null);
     setBusy(false);
     await runPrediction(id);
   }
@@ -326,7 +338,7 @@ export default function Headstart(){
     setDraftId(id);
     setPredictionRun(animate?id:'');
     setStarted(Date.now());
-    go('review');
+    go('review',animate);
   }
   async function runPrediction(id:string,settings:Record<string,unknown>={},endpoint='predict'){
     setPredictionRun(id);
@@ -355,13 +367,17 @@ export default function Headstart(){
   const defaultAssignee=teammates.find(p=>p.id===(team==='data'?'devarshi':'rohan')&&p.id!==me.id)?.id??teammates.find(p=>p.canReceive&&p.id!==me.id)?.id??'';
   return <div className={`app ${page==='detail'?'detail-page':page==='home'?'home-page':''}`}>
     <header className="topbar">
-      <button type="button" className="brand" onClick={()=>go('home')}><Mark/><span>Headstart</span></button>
+      <button type="button" className="brand" aria-label="Headstart" onClick={()=>go('home')}><Mark/><span>Headstart</span></button>
       <div className="topbar-center">
         <label className="top-control team-control"><Layers3 size={15}/><select aria-label="Team filter" value={team} onChange={e=>selectTeam(e.target.value)}>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select><ChevronDown size={14}/></label>
         <span className="top-divider"/>
         <LiveClock open={clockOpen} onToggle={()=>{setClockOpen(!clockOpen);setNoticeOpen(false);}}/>
       </div>
       <div className="topbar-right">
+        <div className="help-controls">
+          <button type="button" className="help-trigger" aria-haspopup="dialog" aria-label="Concept note" title="Concept note" onClick={()=>setHelp('concept')}><BookOpen size={17} aria-hidden="true"/><span>Concept note</span></button>
+          <button type="button" className="help-trigger demo-trigger" aria-haspopup="dialog" aria-label="Demo guide" title="Demo guide" onClick={()=>setHelp('demo')}><Play size={15} aria-hidden="true"/><span>Demo guide</span></button>
+        </div>
         <div className="notifications-wrap"><button type="button" className="icon-button notification-button" aria-label={`Notifications, ${unread} unread`} aria-expanded={noticeOpen} onClick={()=>{setNoticeOpen(!noticeOpen);setClockOpen(false);}}><Bell size={19}/>{unread>0&&<i/>}</button>
           {noticeOpen&&<div className="popover notification-pop"><div className="popover-head"><strong>Notifications</strong><span>{unread} unread</span></div>{notifications.length?notifications.slice(0,18).map(n=><button type="button" key={n.id} className={`notification-row ${state.slack?'slack':''}`} onClick={async()=>{if(n.page==='detail'&&n.taskId)await openTask(n.taskId);else if(n.page)go(n.page as Page);await act('notifications/'+n.id);}}><span className="notification-dot">{!n.read&&<i/>}</span><span>{state.slack&&<SlackAttribution/>}{n.text}<small>{dateTime(n.at)}{n.outOfHours?' · Urgent':''}</small></span></button>):<Empty icon={Bell}>You’re all caught up.</Empty>}</div>}
         </div>
@@ -380,10 +396,10 @@ export default function Headstart(){
     <main className="main"><div className={`main-inner ${widePage?'wide-workspace':''}`}>
       <div className="breadcrumbs"><span>{teamName}</span><ChevronRight size={13}/><strong>{labels[page]}</strong></div>
       {globalError&&!composerOpen&&<div className="banner orange" role="alert"><span>{globalError}</span><button aria-label="Dismiss error" onClick={()=>setGlobalError('')}><X size={15}/></button></div>}
-      {(page==='home'||page==='detail'&&detailOrigin==='home')&&<div hidden={page!=='home'}><HomeSummary key={viewer} s={state} me={me} rows={me.canAssign?outgoing:incoming} drafts={openItems} composer={filteredComposer} open={openTask} onAssign={()=>{setGlobalError('');setComposerOpen(true);}} onOpenItems={()=>go('outbox')} historyControl={historyControl} period={period}/></div>}
-      {composerOpen&&<Assign key={me.id} state={state} me={me} teammates={teammates} defaultAssignee={defaultAssignee} onBegin={begin} reading={reading} demoMode={voiceMode} composer={composer} onEdit={value=>setComposers(previous=>({...previous,[viewer]:{...value,createdAt:previous[viewer]?.text.trim()?previous[viewer].createdAt??now:now}}))} onClose={()=>{setComposerOpen(false);setGlobalError('');}} globalError={globalError}/>}
+      {(page==='home'||page==='detail'&&detailOrigin==='home')&&<div hidden={page!=='home'}><HomeSummary key={viewer} s={state} me={me} rows={me.canAssign?outgoing:incoming} drafts={openItems} composer={filteredComposer} open={openTask} onAssign={()=>{setGlobalError('');setComposerOpen(true);if(demo==='assign')setDemo('brief');}} demoAssign={demo==='assign'} onStopDemo={stopDemo} onOpenItems={()=>go('outbox')} historyControl={historyControl} period={period}/></div>}
+      {composerOpen&&<Assign key={me.id} state={state} me={me} teammates={teammates} defaultAssignee={defaultAssignee} onBegin={begin} reading={reading} demoMode={voiceMode} composer={composer} onEdit={value=>setComposers(previous=>({...previous,[viewer]:{...value,createdAt:previous[viewer]?.text.trim()?previous[viewer].createdAt??now:now}}))} onClose={()=>{setComposerOpen(false);setGlobalError('');stopDemo();}} globalError={globalError} demo={demo} onDemoBrief={()=>setDemo('predict')} onStopDemo={stopDemo}/>}
       {page==='outbox'&&<OpenItems s={state} tasks={openItems} composer={filteredComposer} historyControl={historyControl} onCompose={()=>setComposerOpen(true)} onResume={openDraft}/>}
-      {page==='review'&&draft&&<Review key={draft.id} s={state} t={draft} act={act} onSend={()=>void sendDraft(draft)} goBack={()=>go('outbox')} started={started} busy={busy} demoMode={voiceMode} predicting={predicting===draft.id} animate={predictionRun===draft.id} onPredict={(settings,endpoint)=>runPrediction(draft.id,settings,endpoint)} notes={draftNotes[draft.id]??emptyDraftNotes} setNotes={update=>setDraftNotes(previous=>({...previous,[draft.id]:update(previous[draft.id]??emptyDraftNotes)}))}/>}
+      {page==='review'&&draft&&<Review key={draft.id} s={state} t={draft} act={act} onSend={()=>void sendDraft(draft)} goBack={()=>go('outbox')} demoReview={demo==='review'} onStopDemo={stopDemo} started={started} busy={busy} demoMode={voiceMode} predicting={predicting===draft.id} animate={predictionRun===draft.id} onPredict={(settings,endpoint)=>runPrediction(draft.id,settings,endpoint)} notes={draftNotes[draft.id]??emptyDraftNotes} setNotes={update=>setDraftNotes(previous=>({...previous,[draft.id]:update(previous[draft.id]??emptyDraftNotes)}))}/>}
       {page==='review'&&!draft&&<><Title title="Task draft"/><Empty>This draft has already been sent.</Empty><Button onClick={()=>go('outbox')}>Open items</Button></>}
       {(page==='sent'||page==='detail'&&detailOrigin==='sent')&&<div hidden={page!=='sent'}><TaskList key={viewer+'sent'} title="Sent tasks" description="Track delivery, open questions, and work ready for acceptance." rows={outgoing} historyControl={historyControl} s={state} open={openTask} mode="sent"><Button kind="primary" onClick={()=>setComposerOpen(true)}><Plus size={16}/>Assign new task</Button></TaskList></div>}
       {(page==='tasks'||page==='detail'&&detailOrigin==='tasks')&&<div hidden={page!=='tasks'}><TaskList key={viewer+'tasks'} title="My tasks" description="See shared handoffs and open work you can send for acceptance." rows={incoming} historyControl={historyControl} s={state} open={openTask} mode="received"/></div>}
@@ -397,6 +413,7 @@ export default function Headstart(){
       {page==='settings'&&<Settings s={state} team={team} act={act} demoMode={voiceMode} setDemoMode={setVoiceMode} onReset={()=>setConfirmReset(true)} showApi={()=>go('api')}/>}
       {page==='api'&&<ApiReference back={()=>go('settings')}/>}
     </div></main>
+    {help&&<HelpDrawer key={help} panel={help} onClose={()=>setHelp(null)} onStart={startDemo} switchToManager={!me.canAssign}/>}
     {flash&&<div className="toast" role="status"><CheckCircle2 size={18}/>{flash}<button aria-label="Dismiss notification" onClick={()=>setFlash('')}><X size={15}/></button></div>}
     {confirmReset&&<div className="modal-screen"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="reset-title"><h2 id="reset-title">Reset demo data?</h2><p>Your new handoffs, answers, and settings will be cleared from this browser.</p><div className="row end"><Button onClick={()=>setConfirmReset(false)}>Cancel</Button><Button kind="primary" onClick={()=>void reset()}>Reset demo data</Button></div></section></div>}
   </div>;
@@ -431,26 +448,65 @@ function HistoryControl({period,onChange,weekEnding,onWeek,now,range}:{period:Hi
     {period==='custom'&&<label className="history-custom"><span>Week ending</span><input aria-label="Week ending" type="date" max={dayKey(now)} value={weekEnding||dayKey(now)} onChange={e=>onWeek(e.target.value)}/></label>}
   </div>;
 }
-function HomeOrientation(){
-  return <div className="home-orientation">
-    <section className="concept-note" aria-labelledby="concept-note-title">
-      <h2 id="concept-note-title"><BookOpen size={17} aria-hidden="true"/>Concept note</h2>
-      <p>Headstart helps teammates start work with fewer follow-ups. Given a task brief, it predicts what the assignee might ask and suggests answers or people to ask. The sender reviews what goes into the handoff.</p>
-      <p><strong>Use case.</strong> Shashank hands Devarshi a search CTR analysis across time zones. Sharing the date range, device split, and expected output up front lets Devarshi start before their working hours overlap.</p>
-    </section>
-    <details className="demo-guide" open>
-      <summary><span><FileText size={17} aria-hidden="true"/>Demo guide</span><ChevronDown size={17} aria-hidden="true"/></summary>
-      <ol>
-        <li><strong>Predict.</strong> In <b>Viewing as</b>, select Shashank. Click <b>Assign new task</b>, choose Devarshi, click <b>Use sample task</b>, then <b>Predict questions</b>.</li>
-        <li><strong>Review and send.</strong> Check a suggested answer. Choose <b>Accept this answer</b>, edit it, or nominate a teammate who can clarify. Click <b>Send handoff</b>.</li>
-        <li><strong>Try the analyst view.</strong> Switch to Devarshi, open the new handoff in <b>My tasks</b>, and read <b>Questions shared at handoff</b>. Try a follow-up or click <b>Send for acceptance</b>.</li>
-        <li><strong>Close the loop.</strong> If you submitted the work, switch back to Shashank. Open it in <b>Awaiting acceptance</b> and choose <b>Accept</b> or <b>Send back</b>.</li>
-      </ol>
-    </details>
-  </div>;
+function HelpDrawer({panel,onClose,onStart,switchToManager}:{panel:HelpPanel;onClose:()=>void;onStart:()=>void;switchToManager:boolean}){
+  const dialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{
+    const node=dialog.current;
+    node?.showModal();
+    return ()=>node?.close();
+  },[]);
+  const isConcept=panel==='concept';
+  return <dialog ref={dialog} className="help-drawer" aria-labelledby="help-heading"
+    onCancel={event=>{event.preventDefault();onClose();}}
+    onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
+    <div className="help-drawer-content">
+      <header>
+        <span className="help-drawer-icon">{isConcept?<BookOpen size={23}/>:<Play size={22}/>}</span>
+        <button type="button" className="icon-button" aria-label="Close help panel" onClick={onClose}><X size={20}/></button>
+      </header>
+      {isConcept?<div className="help-drawer-copy">
+        <h2 id="help-heading">Concept note</h2>
+        <p>Headstart helps teammates start work with fewer follow-ups. It reads a task brief, predicts what the assignee might ask, and suggests answers or people to ask. The sender reviews what goes into the handoff.</p>
+        <section>
+          <h3>When it helps</h3>
+          <p>Shashank asks Devarshi to investigate a drop in search click-through rate. They work in different time zones. With the date range, device breakdown, and expected output in the handoff, Devarshi can start before their working hours overlap.</p>
+        </section>
+      </div>:<div className="help-drawer-copy">
+        <h2 id="help-heading">Demo guide</h2>
+        <p>Create a task draft and watch Headstart predict the questions your teammate might ask. The guide highlights each control as you go.</p>
+        <ol>
+          <li>Open <strong>Assign new task</strong>.</li>
+          <li>Pick a teammate and load the sample task or write your own brief.</li>
+          <li>Click <strong>Predict questions</strong> to create the draft.</li>
+        </ol>
+        <p>From the draft, you can verify an answer, nominate someone who can help, and send the handoff.</p>
+        {switchToManager&&<p>The demo opens in Shashank’s manager view so you can assign a task.</p>}
+        <Button kind="primary" onClick={onStart}><Play size={15}/>Start demo</Button>
+      </div>}
+    </div>
+  </dialog>;
 }
 
-function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,historyControl,period}:{s:State;me:Person;rows:Task[];drafts:Task[];composer?:ComposeDraft;open:(id:string)=>void;onAssign:()=>void;onOpenItems:()=>void;historyControl:ReactNode;period:HistoryPeriod}){
+function DemoCoach({step,title,children,onClose,target,action}:{step:number;title:string;children:ReactNode;onClose:()=>void;target?:string;action?:ReactNode}){
+  useEffect(()=>{
+    if(!target)return;
+    const frame=requestAnimationFrame(()=>{
+      const control=document.getElementById(target);
+      if(!control)return;
+      const bounds=control.getBoundingClientRect();
+      if(bounds.top<0||bounds.bottom>window.innerHeight)control.scrollIntoView({block:'center',behavior:'auto'});
+      control.focus({preventScroll:true});
+    });
+    return ()=>cancelAnimationFrame(frame);
+  },[target]);
+  return <aside className="demo-coach" aria-label="Task creation demo">
+    <div className="demo-coach-top"><span>Demo · Step {step} of 3</span><button type="button" className="icon-button" aria-label="Exit demo" onClick={onClose}><X size={14}/></button></div>
+    <div id="demo-coach-instruction" aria-live="polite"><h3>{title}</h3><p>{children}</p></div>
+    {action&&<div className="demo-coach-action">{action}</div>}
+  </aside>;
+}
+
+function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,historyControl,period,demoAssign,onStopDemo}:{s:State;me:Person;rows:Task[];drafts:Task[];composer?:ComposeDraft;open:(id:string)=>void;onAssign:()=>void;onOpenItems:()=>void;historyControl:ReactNode;period:HistoryPeriod;demoAssign:boolean;onStopDemo:()=>void}){
   const [recipient,setRecipient]=useState('');
   const [showAll,setShowAll]=useState(false);
   const groups=new Map<string,Task[]>();
@@ -483,14 +539,14 @@ function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,histor
       <div><h1>{me.canAssign?'Head start the anticipation engine':'Your tasks arrive with answers already in place'}</h1><p>{me.canAssign?'Add a task and see what your reportee may ask next. Send the clarifying answers with the work.':'Open a handoff to review the answers and see who can help with follow-up questions.'}</p></div>
       <div className="overview-actions">{historyControl}</div>
     </div>
-    <HomeOrientation/>
     <div className="home-workspace">
       {me.canAssign&&<div className="prediction-launch">
         <div className="launch-copy">
           <div className="engine-ready"><span className="engine-signal"/><span>Ready to predict clarifying questions</span></div>
           <h2>Create a new task</h2>
           <p>Describe the work. Headstart predicts what your teammate may ask, drafts answers, and suggests people who can help.</p>
-          <Button kind="primary" onClick={onAssign}><Plus size={24}/>Assign new task</Button>
+          {demoAssign&&<DemoCoach step={1} title="Open a new task" target="demo-assign" onClose={onStopDemo}>Click <strong>Assign new task</strong> to open the task form.</DemoCoach>}
+          <Button id="demo-assign" describedBy={demoAssign?'demo-coach-instruction':undefined} className={demoAssign?'demo-highlight':''} kind="primary" onClick={onAssign}><Plus size={24}/>Assign new task</Button>
         </div>
         <ol className="handoff-steps" aria-label="How Headstart works">
           <li><span><FileText size={17}/></span><div><strong>Add a task</strong><small>“Explain last week’s drop in search CTR.”</small></div></li>
@@ -532,7 +588,7 @@ function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,histor
   </div>;
 }
 
-function Assign({state,me,teammates,defaultAssignee,onBegin,reading,demoMode,composer,onEdit,onClose,globalError}:{state:State;me:Person;teammates:Person[];defaultAssignee:string;onBegin:(text:string,id:string,urgent:boolean)=>void;reading:boolean;demoMode:boolean;composer?:ComposeDraft;onEdit:(value:ComposeDraft)=>void;onClose:()=>void;globalError:string}){
+function Assign({state,me,teammates,defaultAssignee,onBegin,reading,demoMode,composer,onEdit,onClose,globalError,demo,onDemoBrief,onStopDemo}:{state:State;me:Person;teammates:Person[];defaultAssignee:string;onBegin:(text:string,id:string,urgent:boolean)=>void;reading:boolean;demoMode:boolean;composer?:ComposeDraft;onEdit:(value:ComposeDraft)=>void;onClose:()=>void;globalError:string;demo:DemoStep|null;onDemoBrief:()=>void;onStopDemo:()=>void}){
   const [useDemo,setUseDemo]=useState(demoMode);
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{const node=dialog.current;if(node&&!node.open)node.showModal();return ()=>{if(node?.open)node.close();};},[]);
@@ -548,19 +604,19 @@ function Assign({state,me,teammates,defaultAssignee,onBegin,reading,demoMode,com
       <div className="assignment-body">
         {globalError&&<div className="banner orange" role="alert">{globalError}</div>}
         <label className="field route-to"><span>Assigned to</span><div className="select-field"><Avatar p={recipient} small/><select value={recipient.id} onChange={e=>set({assigneeId:e.target.value})} aria-label="Assign to" disabled={reading}>{teammates.filter(p=>p.canReceive&&p.id!==me.id).map(p=><option key={p.id} value={p.id}>{p.name} · {roleLabel(p)}</option>)}</select><ChevronDown size={15}/></div></label>
-        <div className="field description-field"><label htmlFor="assignment-brief">What needs doing?</label><div className="editor"><textarea id="assignment-brief" placeholder="Describe the outcome you need and the context that matters." value={text} onChange={e=>set({text:e.target.value})} maxLength={5000} disabled={reading}/><div className="editor-tools"><Dictate context={me.teamId==='data'?'task':'growth'} onText={value=>set({text:value})} demoMode={useDemo}/><button className="link-button" type="button" onClick={()=>set({text:example})} disabled={reading}><FileText size={14}/>Use sample task</button></div></div></div>
+        <div className="field description-field"><label htmlFor="assignment-brief">What needs doing?</label><div className="editor"><textarea id="assignment-brief" placeholder="Describe the outcome you need and the context that matters." value={text} onChange={e=>set({text:e.target.value})} maxLength={5000} disabled={reading}/>{demo==='brief'&&<DemoCoach step={2} title="Add a task brief" target="demo-sample" onClose={onStopDemo} action={text.trim()&&<Button className="small" onClick={onDemoBrief}>Use this brief</Button>}>Keep or change the assignee above. Click <strong>Use sample task</strong> or write your own brief and choose <strong>Use this brief</strong>.</DemoCoach>}<div className="editor-tools"><Dictate context={me.teamId==='data'?'task':'growth'} onText={value=>set({text:value})} demoMode={useDemo}/><button id="demo-sample" aria-describedby={demo==='brief'?'demo-coach-instruction':undefined} className={`link-button ${demo==='brief'?'demo-highlight':''}`} type="button" onClick={()=>{set({text:example});if(demo==='brief')onDemoBrief();}} disabled={reading}><FileText size={14}/>Use sample task</button></div></div></div>
         <div className="assignment-options">
           <label className="check-line"><input type="checkbox" checked={urgent} onChange={e=>set({urgent:e.target.checked})} disabled={reading}/><span><strong>Urgent delivery</strong><small>Notify the assignee immediately, even outside working hours.</small></span></label>
           <label className="aside-option"><input type="checkbox" checked={useDemo} onChange={e=>setUseDemo(e.target.checked)}/> Demo dictation</label>
         </div>
         <div className="delivery-preview"><CalendarClock size={17}/><div><strong>{immediate?'Notify when sent':`Notification at ${dateTime(delivery)}`}</strong><small>{immediate?(`Available to ${recipient.name} immediately.`):`${recipient.name} can open the handoff when sent. Their notification waits until their next shift.`}</small></div></div>
       </div>
-      <div className="assignment-footer"><span>{text.trim()&&<><Check size={14}/> Draft saved</>}</span><div className="row"><Button onClick={onClose} disabled={reading}>Close</Button><Button type="submit" kind="primary" disabled={!text.trim()||reading}>{reading?'Creating draft…':'Predict questions'}<ArrowRight size={16}/></Button></div></div>
+      {demo==='predict'&&<DemoCoach step={3} title="Predict clarifying questions" target="demo-predict" onClose={onStopDemo}>Click <strong>Predict questions</strong> to save the draft and see what your teammate might ask.</DemoCoach>}
+      <div className="assignment-footer"><span>{text.trim()&&<><Check size={14}/> Draft saved</>}</span><div className="row"><Button onClick={onClose} disabled={reading}>Close</Button><Button id="demo-predict" describedBy={demo==='predict'?'demo-coach-instruction':undefined} className={demo==='predict'?'demo-highlight':''} type="submit" kind="primary" disabled={!text.trim()||reading}>{reading?'Creating draft…':'Predict questions'}<ArrowRight size={16}/></Button></div></div>
     </form>
   </dialog>;
 }
-function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,onPredict,notes,setNotes}:{s:State;t:Task;act:Act;onSend:()=>void;goBack:()=>void;started:number;busy:boolean;demoMode:boolean;predicting:boolean;animate:boolean;onPredict:(settings?:Record<string,unknown>,endpoint?:string)=>Promise<Record<string,unknown>|undefined>;notes:DraftNotes;setNotes:(update:(old:DraftNotes)=>DraftNotes)=>void}){
-  const [guide,setGuide]=useState<number|null>(null);
+function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,onPredict,notes,setNotes,demoReview,onStopDemo}:{s:State;t:Task;act:Act;onSend:()=>void;goBack:()=>void;started:number;busy:boolean;demoMode:boolean;predicting:boolean;animate:boolean;onPredict:(settings?:Record<string,unknown>,endpoint?:string)=>Promise<Record<string,unknown>|undefined>;notes:DraftNotes;setNotes:(update:(old:DraftNotes)=>DraftNotes)=>void;demoReview:boolean;onStopDemo:()=>void}){
   const [selected,setSelected]=useState<string[]>([]);
   const [confirming,setConfirming]=useState(false);
   const [confirmMessage,setConfirmMessage]=useState('');
@@ -586,22 +642,6 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
     return (!q.verifiedSuggestion||edit?.text!==undefined)&&Boolean(edit?.text?.trim()??(q.answer||q.source==='predicted'));
   }).map(q=>q.id);
   const libraryIds=library.filter(q=>q.status==='library'&&!q.libraryConfirmed).map(q=>q.id);
-  const guideSteps=[
-    {title:'Review the clarifying questions',text:'Accept or edit the answer, or nominate teammates who can help. Use Remove if the question does not belong in the handoff.',target:'clarification-review'},
-    ...(libraryToReview.length?[{title:'Review questions with existing answers',text:'Confirm the existing answers that apply. Select one or several to confirm together.',target:'saved-library-answers'}]:[]),
-    {title:'Send the handoff',text:`Check when ${receiver.name} will receive the task. Recipients will see the answers you accepted and the teammates you nominated.`,target:'handoff-send'},
-  ];
-  useEffect(()=>{
-    try{if(localStorage.getItem('headstart-review-guide-v2')!=='seen')setGuide(0);}catch{}
-  },[]);
-  function closeGuide(){
-    setGuide(null);
-    try{localStorage.setItem('headstart-review-guide-v2','seen');}catch{}
-  }
-  function moveGuide(step:number){
-    setGuide(step);
-    document.getElementById(guideSteps[step].target)?.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
-  }
   async function bulkConfirm(mode:'clarifications'|'library',ids:string[]){
     setConfirming(true);
     setConfirmMessage('');
@@ -715,18 +755,17 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
         </section>
         <section className="question-stream" id="clarification-review">
           <div className="review-sticky-tools">
-            <div className="row spread wrap"><div><h2>Predicted clarifying questions</h2><p>Questions {receiver.name} may need clarified before starting.</p></div><button type="button" className="link-button review-guide-button" onClick={()=>guide===null?moveGuide(0):closeGuide()} aria-expanded={guide!==null}><CircleHelp size={16}/> Guide</button></div>
+            <div className="row spread wrap"><div><h2>Predicted clarifying questions</h2><p>Questions {receiver.name} may need clarified before starting.</p></div></div>
             <div className="row wrap review-actions">
               <Button className="small" onClick={()=>void (total?predictMore():onPredict())} disabled={toolbarDisabled||exhausted}><Sparkles size={15}/>{predicting?'Predicting…':total?'Predict more questions':'Predict questions'}</Button>
               <Button className="small" onClick={()=>{setAdd(true);requestAnimationFrame(()=>document.getElementById('new-handoff-question')?.focus());}} disabled={toolbarDisabled}><Plus size={15}/>Add a question</Button>
             </div>
             <div className="row spread wrap"><p aria-live="polite">{predicting?'Finding questions, answers, and nominees…':revealing?`Finding questions · ${visible} of ${total}`:`${predictions.filter(q=>q.status!=='removed').length} predicted · ${done} of ${active.length} in review addressed`}</p></div>
           </div>
-          {guide!==null&&guideSteps[Math.min(guide,guideSteps.length-1)]&&<aside className="review-guide" aria-label="Handoff walkthrough">
-            <div className="row spread align-top"><div><small>Step {Math.min(guide+1,guideSteps.length)} of {guideSteps.length}</small><h3>{guideSteps[Math.min(guide,guideSteps.length-1)].title}</h3></div><button type="button" className="icon-button" aria-label="Dismiss guide" onClick={closeGuide}><X size={16}/></button></div>
-            <p>{guideSteps[Math.min(guide,guideSteps.length-1)].text}</p>
-            <div className="row end">{guide>0&&<Button className="small" kind="plain" onClick={()=>moveGuide(guide-1)}>Back</Button>}<Button className="small" kind="primary" onClick={()=>guide+1<guideSteps.length?moveGuide(guide+1):closeGuide()}>{guide+1<guideSteps.length?'Next':'Done'}</Button></div>
-          </aside>}
+          {demoReview&&<DemoCoach step={3} title={predicting||revealing?'Finding likely questions':'Your task draft is ready'} onClose={onStopDemo}
+            action={!predicting&&!revealing&&<Button kind="primary" className="small" onClick={onStopDemo}>Finish demo</Button>}>
+            {predicting||revealing?'Watch the questions appear below.':total?'Review the questions below. You can verify an answer or nominate someone before you send the handoff.':<>Use <strong>Predict questions</strong> above to retry, or return to <strong>Open items</strong> to resume later.</>}
+          </DemoCoach>}
           {(predicting||revealing)&&<div className={`prediction-meter ${predicting?'scanning':''}`} role="progressbar" aria-label="Predicting questions" aria-valuemax={total||undefined} aria-valuenow={predicting?undefined:visible}><span style={{width:predicting?undefined:`${visible/total*100}%`}}/></div>}
           {predicting&&visible===0&&<div className="prediction-placeholder" aria-hidden="true"><span/><span/><span/></div>}
           {moreMessage&&!predicting&&!revealing&&<p className="prediction-result" role="status">{moreMessage}</p>}
