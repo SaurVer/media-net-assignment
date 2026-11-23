@@ -1231,3 +1231,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
 }
 .topbar .person-switch.demo-viewer-highlight>svg { right:4px; color:#21533a; }
 .topbar .person-switch.demo-viewer-highlight select { cursor:pointer; }
+
+.delete-task-dialog {
+  width:min(420px,calc(100vw - 28px)); max-height:calc(100dvh - 28px);
+  margin:auto; padding:19px; border:1px solid #e2d5d8; border-radius:12px;
+  background:#fffdfb; color:var(--text);
+}
+.delete-task-dialog::backdrop { background:#24172266; }
+.delete-task-dialog h2 { font-size:20px; }
+.delete-task-dialog p { margin:8px 0 12px; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+.button.delete-task-trigger { color:#9a3040; }
+.button.delete-task-trigger:hover { background:#faedf0; }
+.button.danger { background:#a12c40; color:#fff; border-color:#a12c40; }
+.button.danger:hover { background:#802033; }
+.assignee-context>.demo-coach { margin:10px 14px; width:min(345px,calc(100% - 28px)); }
+.ask-form #demo-ask-question { outline:2px solid #21533a; outline-offset:2px; }
+.acceptance-request:has(.demo-coach) { flex-wrap:wrap; }

@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect,useRef,useState,type FormEvent,type ReactNode} from 'react';
-import {Activity,ArrowLeft,ArrowRight,Bell,BookOpen,Check,CheckCircle2,ChevronDown,ChevronRight,Clock3,Code2,Command,CornerDownRight,House,FileCheck2,FileText,Inbox,Layers3,Mic,Plus,RotateCcw,Send,Settings2,Sparkles,Users,MessageSquare,CalendarClock,Play,X,type LucideIcon} from 'lucide-react';
+import {Activity,ArrowLeft,ArrowRight,Bell,BookOpen,Check,CheckCircle2,ChevronDown,ChevronRight,Clock3,Code2,Command,CornerDownRight,House,FileCheck2,FileText,Inbox,Layers3,Mic,Plus,RotateCcw,Send,Settings2,Sparkles,Users,MessageSquare,CalendarClock,Play,Trash2,X,type LucideIcon} from 'lucide-react';
 import {ensurePredictionHistory,seed} from '../data/seed';
 import {agenda,isOutstanding,isResolved,nominationOpen,librarySearch,listTasks} from '../lib/engine';
 import {endpoints} from '../lib/api-list';
@@ -214,6 +214,8 @@ export default function Headstart(){
   const [busy,setBusy]=useState(false);
   const [globalError,setGlobalError]=useState('');
   const [confirmReset,setConfirmReset]=useState(false);
+  const [deleteTarget,setDeleteTarget]=useState<Task|null>(null);
+  const [deleting,setDeleting]=useState(false);
 
   useEffect(()=>{
     try{
@@ -375,6 +377,26 @@ export default function Headstart(){
       setDraftId('');detailScroll.current=0;setDetailOrigin('sent');setDetail(t.id);go('detail',true);setDemo(step=>step==='review'?'sent':null);setFlash(deliveryText(sent as unknown as Task,live.current));
     }
   }
+  function requestDelete(t:Task){
+    setGlobalError('');
+    setDeleteTarget(t);
+  }
+  async function deleteTask(t:Task){
+    setDeleting(true);
+    try{
+      if(!await act('tasks/'+t.id,{actorId:viewer},'DELETE'))return;
+      setDraftNotes(previous=>{
+        const next={...previous};
+        delete next[t.id];
+        return next;
+      });
+      setDeleteTarget(null);
+      setDraftId('');
+      setDetail('');
+      go(t.sentAt?detailOrigin:'outbox');
+      setFlash('Task deleted.');
+    }finally{setDeleting(false);}
+  }
   async function reset(){
     if(await act('demo/reset')){setTeam('data');setViewer('shashank');setDraftId('');setDetail('');setConfirmReset(false);setComposers({});setDraftNotes({});setPeriod('last7');setWeekEnding('');go('home');setFlash('Demo data restored.');}
   }
@@ -420,15 +442,15 @@ export default function Headstart(){
     </aside>
     <main className="main"><div className={`main-inner ${widePage?'wide-workspace':''}`}>
       <div className="breadcrumbs"><span>{teamName}</span><ChevronRight size={13}/><strong>{labels[page]}</strong></div>
-      {globalError&&!composerOpen&&<div className="banner orange" role="alert"><span>{globalError}</span><button aria-label="Dismiss error" onClick={()=>setGlobalError('')}><X size={15}/></button></div>}
+      {globalError&&!composerOpen&&!deleteTarget&&<div className="banner orange" role="alert"><span>{globalError}</span><button aria-label="Dismiss error" onClick={()=>setGlobalError('')}><X size={15}/></button></div>}
       {(page==='home'||page==='detail'&&detailOrigin==='home')&&<div hidden={page!=='home'}><HomeSummary key={viewer} s={state} me={me} rows={me.canAssign?outgoing:incoming} drafts={openItems} composer={filteredComposer} open={openTask} onAssign={()=>{setGlobalError('');setComposerOpen(true);if(demo==='assign')setDemo('brief');}} demoAssign={demo==='assign'} demoIncoming={demo==='analyst-home'?selected:undefined} onStopDemo={demo==='analyst-home'?finishDemo:stopDemo} onOpenItems={()=>go('outbox')} historyControl={historyControl} period={period}/></div>}
       {composerOpen&&<Assign key={me.id} state={state} me={me} teammates={teammates} defaultAssignee={defaultAssignee} onBegin={begin} reading={reading} demoMode={voiceMode} composer={composer} onEdit={value=>setComposers(previous=>({...previous,[viewer]:{...value,createdAt:previous[viewer]?.text.trim()?previous[viewer].createdAt??now:now}}))} onClose={()=>{setComposerOpen(false);setGlobalError('');stopDemo();}} globalError={globalError} demo={demo} onDemoBrief={()=>setDemo('predict')} onStopDemo={stopDemo}/>}
       {page==='outbox'&&<OpenItems s={state} tasks={openItems} composer={filteredComposer} historyControl={historyControl} onCompose={()=>setComposerOpen(true)} onResume={openDraft}/>}
-      {page==='review'&&draft&&<Review key={draft.id} s={state} t={draft} act={act} onSend={()=>void sendDraft(draft)} goBack={()=>go('outbox')} demoReview={demo==='review'} onStopDemo={stopDemo} started={started} busy={busy} demoMode={voiceMode} predicting={predicting===draft.id} animate={predictionRun===draft.id} onPredict={(settings,endpoint)=>runPrediction(draft.id,settings,endpoint)} notes={draftNotes[draft.id]??emptyDraftNotes} setNotes={update=>setDraftNotes(previous=>({...previous,[draft.id]:update(previous[draft.id]??emptyDraftNotes)}))}/>}
+      {page==='review'&&draft&&<Review key={draft.id} s={state} t={draft} act={act} onSend={()=>void sendDraft(draft)} goBack={()=>go('outbox')} onDelete={draft.assignerId===viewer?()=>requestDelete(draft):undefined} demoReview={demo==='review'} onStopDemo={stopDemo} started={started} busy={busy} demoMode={voiceMode} predicting={predicting===draft.id} animate={predictionRun===draft.id} onPredict={(settings,endpoint)=>runPrediction(draft.id,settings,endpoint)} notes={draftNotes[draft.id]??emptyDraftNotes} setNotes={update=>setDraftNotes(previous=>({...previous,[draft.id]:update(previous[draft.id]??emptyDraftNotes)}))}/>}
       {page==='review'&&!draft&&<><Title title="Task draft"/><Empty>This draft has already been sent.</Empty><Button onClick={()=>go('outbox')}>Open items</Button></>}
       {(page==='sent'||page==='detail'&&detailOrigin==='sent')&&<div hidden={page!=='sent'}><TaskList key={viewer+'sent'} title="Sent tasks" description="Track delivery, open questions, and work ready for acceptance." rows={outgoing} historyControl={historyControl} s={state} open={openTask} mode="sent"><Button kind="primary" onClick={()=>setComposerOpen(true)}><Plus size={16}/>Assign new task</Button></TaskList></div>}
       {(page==='tasks'||page==='detail'&&detailOrigin==='tasks')&&<div hidden={page!=='tasks'}><TaskList key={viewer+'tasks'} title="My tasks" description="See shared handoffs and open work you can send for acceptance." rows={incoming} historyControl={historyControl} s={state} open={openTask} mode="received"/></div>}
-      {page==='detail'&&selected&&<TaskDetail key={selected.id+me.id} s={state} t={selected} me={me} act={act} demoRecipient={demo==='analyst-task'} onStopDemo={finishDemo} backLabel={labels[detailOrigin]??'Home'} back={()=>{go(detailOrigin);requestAnimationFrame(()=>window.scrollTo(0,detailScroll.current));}}/>}
+      {page==='detail'&&selected&&<TaskDetail key={selected.id+me.id} s={state} t={selected} me={me} act={act} demoRecipient={demo==='analyst-task'} onStopDemo={finishDemo} onDelete={selected.assignerId===viewer?()=>requestDelete(selected):undefined} backLabel={labels[detailOrigin]??'Home'} back={()=>{go(detailOrigin);requestAnimationFrame(()=>window.scrollTo(0,detailScroll.current));}}/>}
       {page==='questions'&&<QuestionInbox title="Questions for me" description="Questions teammates have sent you or nominated you to answer." rows={myQuestions} s={state} me={me} act={act} demoMode={voiceMode}/>}
       {page==='agenda'&&<QuestionInbox title="Pending team questions" description="Questions from your direct reports that still need an answer." rows={agendaRows} s={state} me={me} act={act} overlap demoMode={voiceMode}/>}
       {page==='acceptance'&&<Acceptance s={state} pending={pending} me={me} act={act} open={openTask}/>}
@@ -440,8 +462,28 @@ export default function Headstart(){
     </div></main>
     {help&&<HelpDrawer key={help} panel={help} onClose={()=>setHelp(null)} onStart={startDemo} switchToManager={!me.canAssign}/>}
     {flash&&<div className="toast" role="status"><CheckCircle2 size={18}/>{flash}<button aria-label="Dismiss notification" onClick={()=>setFlash('')}><X size={15}/></button></div>}
+    {deleteTarget&&<DeleteTaskDialog task={deleteTarget} deleting={deleting} error={globalError} onCancel={()=>{setDeleteTarget(null);setGlobalError('');}} onConfirm={()=>void deleteTask(deleteTarget)}/>}
     {confirmReset&&<div className="modal-screen"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="reset-title"><h2 id="reset-title">Reset demo data?</h2><p>Your new handoffs, answers, and settings will be cleared from this browser.</p><div className="row end"><Button onClick={()=>setConfirmReset(false)}>Cancel</Button><Button kind="primary" onClick={()=>void reset()}>Reset demo data</Button></div></section></div>}
   </div>;
+}
+function DeleteTaskDialog({task,deleting,error,onCancel,onConfirm}:{task:Task;deleting:boolean;error:string;onCancel:()=>void;onConfirm:()=>void}){
+  const dialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{
+    const node=dialog.current;
+    node?.showModal();
+    return ()=>node?.close();
+  },[]);
+  return <dialog ref={dialog} className="delete-task-dialog" aria-labelledby="delete-task-title"
+    onCancel={event=>{event.preventDefault();if(!deleting)onCancel();}}>
+    <h2 id="delete-task-title">Delete this task?</h2>
+    <p>{task.text}</p>
+    <p>{task.sentAt?'The task and its questions will be removed from your dashboard and the recipient’s.':'The draft and its questions will be removed from Open items.'} This can’t be undone.</p>
+    {error&&<p className="banner orange" role="alert">{error}</p>}
+    <div className="row end wrap">
+      <button type="button" className="button" autoFocus onClick={onCancel} disabled={deleting}>Cancel</button>
+      <Button kind="danger" onClick={onConfirm} disabled={deleting}>{deleting?'Deleting…':'Delete task'}</Button>
+    </div>
+  </dialog>;
 }
 function deliveryText(t:Task,s:State){
   const name=getPersona(s,t.assigneeId).name;
@@ -512,7 +554,10 @@ function HelpDrawer({panel,onClose,onStart,switchToManager}:{panel:HelpPanel;onC
           <li>Remove a suggested question that does not belong.</li>
           <li>Confirm a matching answer from the library when one is available.</li>
           <li>Review what will be shared and click <strong>Send handoff</strong>.</li>
-          <li>Use <strong>Viewing as</strong> to select the recipient and open the task. Finish the demo to return to Shashank’s dashboard.</li>
+          <li>Use <strong>Viewing as</strong> to select the recipient and open the task.</li>
+          <li>Review the answers and see who can clarify outstanding questions.</li>
+          <li>Ask a follow-up and see where it goes.</li>
+          <li>Try <strong>Send for acceptance</strong>, then return to Shashank’s dashboard.</li>
         </ol>
         {switchToManager&&<p>The demo opens in Shashank’s manager view so you can assign a task.</p>}
         <Button kind="primary" onClick={onStart}><Play size={15}/>Start demo</Button>
@@ -534,7 +579,7 @@ function DemoCoach({step,title,children,onClose,target,action}:{step:number;titl
     return ()=>cancelAnimationFrame(frame);
   },[target]);
   return <aside className="demo-coach" aria-label="Handoff demo">
-    <div className="demo-coach-top"><span>Demo · Step {step} of 9</span><button type="button" className="icon-button" aria-label="Exit demo" onClick={onClose}><X size={14}/></button></div>
+    <div className="demo-coach-top"><span>Demo · Step {step} of 12</span><button type="button" className="icon-button" aria-label="Exit demo" onClick={onClose}><X size={14}/></button></div>
     <div id={demoInstruction} aria-live="polite"><h3>{title}</h3><p>{children}</p></div>
     {action&&<div className="demo-coach-action">{action}</div>}
   </aside>;
@@ -653,7 +698,7 @@ function Assign({state,me,teammates,defaultAssignee,onBegin,reading,demoMode,com
     </form>
   </dialog>;
 }
-function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,onPredict,notes,setNotes,demoReview,onStopDemo}:{s:State;t:Task;act:Act;onSend:()=>void;goBack:()=>void;started:number;busy:boolean;demoMode:boolean;predicting:boolean;animate:boolean;onPredict:(settings?:Record<string,unknown>,endpoint?:string)=>Promise<Record<string,unknown>|undefined>;notes:DraftNotes;setNotes:(update:(old:DraftNotes)=>DraftNotes)=>void;demoReview:boolean;onStopDemo:()=>void}){
+function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,onPredict,notes,setNotes,demoReview,onStopDemo,onDelete}:{s:State;t:Task;act:Act;onSend:()=>void;goBack:()=>void;started:number;busy:boolean;demoMode:boolean;predicting:boolean;animate:boolean;onPredict:(settings?:Record<string,unknown>,endpoint?:string)=>Promise<Record<string,unknown>|undefined>;notes:DraftNotes;setNotes:(update:(old:DraftNotes)=>DraftNotes)=>void;demoReview:boolean;onStopDemo:()=>void;onDelete?:()=>void}){
   const [selected,setSelected]=useState<string[]>([]);
   const [confirming,setConfirming]=useState(false);
   const [confirmMessage,setConfirmMessage]=useState('');
@@ -799,7 +844,7 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
   const reviewQuestion=(q:Question,number:number,animateQuestion=false)=><ReviewQuestion key={q.id} number={number} animate={animateQuestion} q={q} s={s} t={t} act={act} demoMode={localDemo} edit={notes.answers[q.id]} onEdit={value=>editQuestion(q.id,value)} onSave={value=>saveQuestion(q.id,value)} onCancel={()=>clearEdit(q.id)} additionalDraft={notes.extraAnswers?.[q.id]} onAdditionalEdit={value=>editAdditional(q.id,value)} selectable={clarificationIds.includes(q.id)} selected={checked(q.id)} onSelect={()=>toggle(q.id)} demoAction={q.id===demoAnswer?.id?'answer':q.id===demoNomination?.id?'nominate':q.id===demoRemoval?.id?'remove':undefined} onStopDemo={onStopDemo}/>;
   return <>
     <button className="link-button back" onClick={goBack}><ArrowLeft size={15}/>Open items</button>
-    <Title title="Task draft" description="Verify suggested answers and choose who can help before sending."><span className="saved-stamp"><Check size={15}/> Saved in Open items</span></Title>
+    <Title title="Task draft" description="Verify suggested answers and choose who can help before sending."><div className="row wrap"><span className="saved-stamp"><Check size={15}/> Saved in Open items</span>{onDelete&&<Button className="delete-task-trigger" onClick={onDelete} disabled={toolbarDisabled}><Trash2 size={15}/>Delete task</Button>}</div></Title>
     <div className="review-grid review-transition">
       <div className="review-work">
         <section className="task-summary dispatch-sheet brief-header">
@@ -1006,8 +1051,10 @@ function TaskList({title,description,rows,s,open,mode,children,historyControl}:{
         {limit<visible.length&&<div className="list-padding"><Button onClick={()=>setLimit(limit+20)}>Show more tasks</Button></div>}</>:<Empty>{search?'No tasks match this search.':mode==='received'?'Nothing waiting for you. New work appears here when someone sends it.':'No handoffs in this view yet.'}</Empty>}
     </section></>;
 }
-function TaskDetail({s,t,me,act,back,backLabel,demoRecipient,onStopDemo}:{s:State;t:Task;me:Person;act:Act;back:()=>void;backLabel:string;demoRecipient:boolean;onStopDemo:()=>void}){
+function TaskDetail({s,t,me,act,back,backLabel,demoRecipient,onStopDemo,onDelete}:{s:State;t:Task;me:Person;act:Act;back:()=>void;backLabel:string;demoRecipient:boolean;onStopDemo:()=>void;onDelete?:()=>void}){
   const [asked,setAsked]=useState('');
+  const [asking,setAsking]=useState(false);
+  const [recipientStep,setRecipientStep]=useState<'context'|'ask'|'review-follow-up'|'submit'>('context');
   const [acceptanceNote,setAcceptanceNote]=useState('');
   const [submitting,setSubmitting]=useState(false);
   const [newAssignee,setNewAssignee]=useState('');
@@ -1026,9 +1073,20 @@ function TaskDetail({s,t,me,act,back,backLabel,demoRecipient,onStopDemo}:{s:Stat
   const canModify=isShared&&t.assignerId===me.id&&t.status!=='accepted';
   const editable=isAssignee&&isShared&&t.status!=='accepted';
   const canSubmit=editable&&['queued','new','waiting','in_progress','sent_back'].includes(t.status);
+  const guide=demoRecipient?recipientStep:undefined;
+  async function askFollowUp(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();
+    if(asking||!asked.trim())return;
+    setAsking(true);
+    try{
+      if(!await act('tasks/'+t.id+'/questions',{text:asked}))return;
+      setAsked('');
+      if(guide==='ask')setRecipientStep('review-follow-up');
+    }finally{setAsking(false);}
+  }
   return <>
     <button className="link-button back" onClick={back}><ArrowLeft size={15}/>Back to {backLabel}</button>
-    <Title title={isAssignee?"Task details":"Handoff sent"}><div className="row wrap"><PillStatus t={t}/>{canModify&&!modifying&&<Button onClick={()=>{setNewAssignee('');setModifying(true);}}>Modify</Button>}</div></Title>
+    <Title title={isAssignee?"Task details":"Handoff sent"}><div className="row wrap"><PillStatus t={t}/>{canModify&&!modifying&&<Button onClick={()=>{setNewAssignee('');setModifying(true);}}>Modify</Button>}{onDelete&&<Button className="delete-task-trigger" onClick={onDelete}><Trash2 size={15}/>Delete task</Button>}</div></Title>
     {canModify&&modifying&&<ModifyHandoff t={t} questions={handoffRows} act={act} close={()=>setModifying(false)}/>}
     {t.status==='acceptance_requested'&&t.assignerId===me.id&&<section className="panel detail-acceptance" aria-labelledby="review-submitted-title">
       <div><h2 id="review-submitted-title">Review submitted work</h2>{t.acceptanceNote&&<p>{t.acceptanceNote}</p>}</div>
@@ -1061,14 +1119,32 @@ function TaskDetail({s,t,me,act,back,backLabel,demoRecipient,onStopDemo}:{s:Stat
         finally{setSubmitting(false);}
       }}>
         <input value={acceptanceNote} onChange={e=>setAcceptanceNote(e.target.value)} placeholder="Add a note (optional)" aria-label="Acceptance note"/>
-        <Button type="submit" kind="primary" disabled={submitting}><FileCheck2 size={16}/>{submitting?'Sending…':'Send for acceptance'}</Button>
+        <Button id={guide==='submit'?'demo-submit-work':undefined} describedBy={guide==='submit'?demoInstruction:undefined} className={guide==='submit'?'demo-highlight':''} type="submit" kind="primary" disabled={submitting}><FileCheck2 size={16}/>{submitting?'Sending…':'Send for acceptance'}</Button>
       </form>
+      {guide==='submit'&&<DemoCoach step={12} title="Submit completed work" target="demo-submit-work" onClose={onStopDemo}
+        action={<Button className="small" onClick={onStopDemo}>Finish without submitting</Button>}>
+        When work is ready, <strong>Send for acceptance</strong> sends it back to the assigner for review. Try it on this demo task.
+      </DemoCoach>}
     </section>}
-    {isAssignee&&t.status==='acceptance_requested'&&<div className="banner amber"><strong>Sent for review</strong><span>Waiting for {getPersona(s,t.assignerId).name} to respond.</span></div>}
-    <section className="panel detail-questions handoff-context"><div className="panel-head"><span className="icon-square"><MessageSquare size={18}/></span><div><h2 id={demoRecipient?'demo-shared-context':undefined} tabIndex={demoRecipient?-1:undefined}>Questions shared at handoff</h2><p>Predicted and added questions, answers, and people to ask.</p></div></div>{demoRecipient&&<DemoCoach step={9} title="This is what the recipient gets" target="demo-shared-context" onClose={onStopDemo} action={<Button kind="primary" className="small" onClick={onStopDemo}>Finish demo</Button>}>The answers and nominees are already here. Use <strong>Ask a question</strong> below if you need more detail.</DemoCoach>}{handoffRows.length?handoffRows.map(q=><AnswerRead key={q.id} s={s} t={t} q={q} act={act} editable={editable}/>):<Empty>There are no questions attached to this handoff.</Empty>}</section>
+    {isAssignee&&t.status==='acceptance_requested'&&<div className="banner amber"><strong id={guide==='submit'?'demo-review-status':undefined} tabIndex={guide==='submit'?-1:undefined}>Sent for review</strong><span>Waiting for {getPersona(s,t.assignerId).name} to respond.</span></div>}
+    {guide==='submit'&&!canSubmit&&<DemoCoach step={12} title="Work sent for review" target="demo-review-status" onClose={onStopDemo} action={<Button kind="primary" className="small" onClick={onStopDemo}>Finish demo</Button>}>
+      {getPersona(s,t.assignerId).name} can open this request in <strong>Awaiting acceptance</strong>. Finish to return to Shashank’s dashboard.
+    </DemoCoach>}
+    <section className="panel detail-questions handoff-context"><div className="panel-head"><span className="icon-square"><MessageSquare size={18}/></span><div><h2 id={guide==='context'?'demo-shared-context':undefined} tabIndex={guide==='context'?-1:undefined}>Questions shared at handoff</h2><p>Predicted and added questions, answers, and people to ask.</p></div></div>{guide==='context'&&<DemoCoach step={10} title="Review the handoff answers" target="demo-shared-context" onClose={onStopDemo} action={<Button kind="primary" className="small" onClick={()=>setRecipientStep('ask')}>Try a follow-up<ArrowRight size={14}/></Button>}>Start with the confirmed answers. The nominees are people you can ask if you need to clarify something.</DemoCoach>}{handoffRows.length?handoffRows.map(q=><AnswerRead key={q.id} s={s} t={t} q={q} act={act} editable={editable}/>):<Empty>There are no questions attached to this handoff.</Empty>}</section>
     {retrospective.length>0&&<section className="panel detail-questions handoff-context"><div className="panel-head"><span className="icon-square"><Sparkles size={18}/></span><div><h2>Questions predicted for this past task</h2><p>Headstart generated these after the task was sent.</p></div></div><ul className="retrospective-questions">{retrospective.map(q=><li key={q.id}>{q.text}</li>)}</ul></section>}
-    <section className="panel detail-questions assignee-context"><div className="panel-head"><span className="icon-square"><CornerDownRight size={18}/></span><div><h2>{isAssignee?'Your follow-up questions':'Assignee follow-up questions'}</h2><p>New questions asked after the handoff, with their replies or routes.</p></div></div>{askedRows.length?askedRows.map(q=><AnswerRead key={q.id} s={s} t={t} q={q} act={act} editable={editable}/>):<div className="list-padding muted">No follow-up questions yet.</div>}
-      {editable&&<form className="list-padding ask-form" onSubmit={async e=>{e.preventDefault();if(asked.trim()&&await act('tasks/'+t.id+'/questions',{text:asked}))setAsked('');}}><label className="field"><span>Ask a question</span><textarea value={asked} onChange={e=>setAsked(e.target.value)} aria-label="Ask a question" placeholder="What do you need to move forward?" rows={2}/></label><Button type="submit" kind="primary" disabled={!asked.trim()}>Ask</Button></form>}
+    <section className="panel detail-questions assignee-context"><div className="panel-head"><span className="icon-square"><CornerDownRight size={18}/></span><div><h2 id={guide==='review-follow-up'?'demo-follow-up-result':undefined} tabIndex={guide==='review-follow-up'?-1:undefined}>{isAssignee?'Your follow-up questions':'Assignee follow-up questions'}</h2><p>New questions asked after the handoff, with their replies or routes.</p></div></div>{askedRows.length?askedRows.map(q=><AnswerRead key={q.id} s={s} t={t} q={q} act={act} editable={editable}/>):<div className="list-padding muted">No follow-up questions yet.</div>}
+      {guide==='review-follow-up'&&<DemoCoach step={11} title="See where your follow-up went" target="demo-follow-up-result" onClose={onStopDemo}
+        action={<Button kind="primary" className="small" onClick={()=>setRecipientStep('submit')}>Continue to submission<ArrowRight size={14}/></Button>}>
+        Your question is above. Its answer or routing status appears in this section.
+      </DemoCoach>}
+      {editable&&<form className="list-padding ask-form" onSubmit={askFollowUp}>
+        {guide==='ask'&&<DemoCoach step={11} title="Ask a follow-up" target="demo-ask-question" onClose={onStopDemo}
+          action={<Button className="small" onClick={()=>setAsked('Which data source should I use for this task?')}>Use sample question</Button>}>
+          Write a question or use the sample, then click <strong>Ask</strong>.
+        </DemoCoach>}
+        <label className="field"><span>Ask a question</span><textarea id={guide==='ask'?'demo-ask-question':undefined} aria-describedby={guide==='ask'?demoInstruction:undefined} value={asked} onChange={e=>setAsked(e.target.value)} aria-label="Ask a question" placeholder="What do you need to move forward?" rows={2}/></label>
+        <Button type="submit" kind="primary" disabled={!asked.trim()||asking}>{asking?'Asking…':'Ask'}</Button>
+      </form>}
     </section>
     {t.status==='accepted'&&<ConfirmRating s={s} t={t} me={me} act={act}/>}
 
