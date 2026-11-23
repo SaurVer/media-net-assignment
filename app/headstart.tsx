@@ -310,10 +310,18 @@ export default function Headstart(){
     else go('home');
     setDemo('assign');
   }
-  function showDemoRecipient(t:Task){
-    viewAs(getPersona(state,t.assigneeId));
-    setDetail(t.id);
-    setDemo('analyst-home');
+  function chooseViewer(id:string){
+    const recipientGuide=demo==='sent'||demo==='analyst-home'||demo==='analyst-task';
+    const handoff=recipientGuide?selected:undefined;
+    viewAs(getPersona(state,id));
+    if(handoff){
+      setDetail(handoff.id);
+      setDemo(id===handoff.assigneeId?'analyst-home':'sent');
+    }
+  }
+  function finishDemo(){
+    viewAs(getPersona(state,'shashank'));
+    setFlash('Demo complete. You’re back in Shashank’s dashboard.');
   }
   function selectTeam(id:string){
     const p=state.people.find(p=>p.teamId===id&&p.canAssign);
@@ -390,7 +398,16 @@ export default function Headstart(){
           {noticeOpen&&<div className="popover notification-pop"><div className="popover-head"><strong>Notifications</strong><span>{unread} unread</span></div>{notifications.length?notifications.slice(0,18).map(n=><button type="button" key={n.id} className={`notification-row ${state.slack?'slack':''}`} onClick={async()=>{if(n.page==='detail'&&n.taskId)await openTask(n.taskId);else if(n.page)go(n.page as Page);await act('notifications/'+n.id);}}><span className="notification-dot">{!n.read&&<i/>}</span><span>{state.slack&&<SlackAttribution/>}{n.text}<small>{dateTime(n.at)}{n.outOfHours?' · Urgent':''}</small></span></button>):<Empty icon={Bell}>You’re all caught up.</Empty>}</div>}
         </div>
         <span className="top-divider"/>
-        <label className="person-switch"><Avatar p={me} online={onShift(me,now)}/><span className="person-switch-text"><small>Viewing as</small><select aria-label="Viewing as" value={viewer} onChange={e=>viewAs(getPersona(state,e.target.value))}>{teammates.map(p=><option key={p.id} value={p.id}>{p.name} · {roleLabel(p)}</option>)}</select></span><ChevronDown size={13}/></label>
+        <div className="viewer-control">
+          <label className={`person-switch ${demo==='sent'?'demo-viewer-highlight':''}`}>
+            <Avatar p={me} online={onShift(me,now)}/>
+            <span className="person-switch-text"><small>Viewing as</small><select id="viewing-as" aria-label="Viewing as" aria-describedby={demo==='sent'?demoInstruction:undefined} value={viewer} onChange={e=>chooseViewer(e.target.value)}>{teammates.map(p=><option key={p.id} value={p.id}>{p.name} · {roleLabel(p)}</option>)}</select></span>
+            <ChevronDown size={13}/>
+          </label>
+          {demo==='sent'&&selected&&<DemoCoach step={9} title="Try a different profile" target="viewing-as" onClose={finishDemo}>
+            Open <strong>Viewing as</strong> to see anyone’s dashboard. Choose <strong>{getPersona(state,selected.assigneeId).name}</strong> to see the handoff you just sent.
+          </DemoCoach>}
+        </div>
       </div>
     </header>
     <aside className="sidebar">
@@ -404,18 +421,14 @@ export default function Headstart(){
     <main className="main"><div className={`main-inner ${widePage?'wide-workspace':''}`}>
       <div className="breadcrumbs"><span>{teamName}</span><ChevronRight size={13}/><strong>{labels[page]}</strong></div>
       {globalError&&!composerOpen&&<div className="banner orange" role="alert"><span>{globalError}</span><button aria-label="Dismiss error" onClick={()=>setGlobalError('')}><X size={15}/></button></div>}
-      {(page==='home'||page==='detail'&&detailOrigin==='home')&&<div hidden={page!=='home'}><HomeSummary key={viewer} s={state} me={me} rows={me.canAssign?outgoing:incoming} drafts={openItems} composer={filteredComposer} open={openTask} onAssign={()=>{setGlobalError('');setComposerOpen(true);if(demo==='assign')setDemo('brief');}} demoAssign={demo==='assign'} demoIncoming={demo==='analyst-home'?selected:undefined} onStopDemo={stopDemo} onOpenItems={()=>go('outbox')} historyControl={historyControl} period={period}/></div>}
+      {(page==='home'||page==='detail'&&detailOrigin==='home')&&<div hidden={page!=='home'}><HomeSummary key={viewer} s={state} me={me} rows={me.canAssign?outgoing:incoming} drafts={openItems} composer={filteredComposer} open={openTask} onAssign={()=>{setGlobalError('');setComposerOpen(true);if(demo==='assign')setDemo('brief');}} demoAssign={demo==='assign'} demoIncoming={demo==='analyst-home'?selected:undefined} onStopDemo={demo==='analyst-home'?finishDemo:stopDemo} onOpenItems={()=>go('outbox')} historyControl={historyControl} period={period}/></div>}
       {composerOpen&&<Assign key={me.id} state={state} me={me} teammates={teammates} defaultAssignee={defaultAssignee} onBegin={begin} reading={reading} demoMode={voiceMode} composer={composer} onEdit={value=>setComposers(previous=>({...previous,[viewer]:{...value,createdAt:previous[viewer]?.text.trim()?previous[viewer].createdAt??now:now}}))} onClose={()=>{setComposerOpen(false);setGlobalError('');stopDemo();}} globalError={globalError} demo={demo} onDemoBrief={()=>setDemo('predict')} onStopDemo={stopDemo}/>}
       {page==='outbox'&&<OpenItems s={state} tasks={openItems} composer={filteredComposer} historyControl={historyControl} onCompose={()=>setComposerOpen(true)} onResume={openDraft}/>}
       {page==='review'&&draft&&<Review key={draft.id} s={state} t={draft} act={act} onSend={()=>void sendDraft(draft)} goBack={()=>go('outbox')} demoReview={demo==='review'} onStopDemo={stopDemo} started={started} busy={busy} demoMode={voiceMode} predicting={predicting===draft.id} animate={predictionRun===draft.id} onPredict={(settings,endpoint)=>runPrediction(draft.id,settings,endpoint)} notes={draftNotes[draft.id]??emptyDraftNotes} setNotes={update=>setDraftNotes(previous=>({...previous,[draft.id]:update(previous[draft.id]??emptyDraftNotes)}))}/>}
       {page==='review'&&!draft&&<><Title title="Task draft"/><Empty>This draft has already been sent.</Empty><Button onClick={()=>go('outbox')}>Open items</Button></>}
       {(page==='sent'||page==='detail'&&detailOrigin==='sent')&&<div hidden={page!=='sent'}><TaskList key={viewer+'sent'} title="Sent tasks" description="Track delivery, open questions, and work ready for acceptance." rows={outgoing} historyControl={historyControl} s={state} open={openTask} mode="sent"><Button kind="primary" onClick={()=>setComposerOpen(true)}><Plus size={16}/>Assign new task</Button></TaskList></div>}
       {(page==='tasks'||page==='detail'&&detailOrigin==='tasks')&&<div hidden={page!=='tasks'}><TaskList key={viewer+'tasks'} title="My tasks" description="See shared handoffs and open work you can send for acceptance." rows={incoming} historyControl={historyControl} s={state} open={openTask} mode="received"/></div>}
-      {page==='detail'&&selected&&demo==='sent'&&<DemoCoach step={9} title="See the handoff as your teammate" onClose={stopDemo}
-        action={<Button kind="primary" className="small" onClick={()=>showDemoRecipient(selected)}>View as {getPersona(state,selected.assigneeId).name}<ArrowRight size={14}/></Button>}>
-        The handoff is sent. Switch to the recipient’s profile to see where it arrived and what they can read.
-      </DemoCoach>}
-      {page==='detail'&&selected&&<TaskDetail key={selected.id+me.id} s={state} t={selected} me={me} act={act} demoRecipient={demo==='analyst-task'} onStopDemo={stopDemo} backLabel={labels[detailOrigin]??'Home'} back={()=>{go(detailOrigin);requestAnimationFrame(()=>window.scrollTo(0,detailScroll.current));}}/>}
+      {page==='detail'&&selected&&<TaskDetail key={selected.id+me.id} s={state} t={selected} me={me} act={act} demoRecipient={demo==='analyst-task'} onStopDemo={finishDemo} backLabel={labels[detailOrigin]??'Home'} back={()=>{go(detailOrigin);requestAnimationFrame(()=>window.scrollTo(0,detailScroll.current));}}/>}
       {page==='questions'&&<QuestionInbox title="Questions for me" description="Questions teammates have sent you or nominated you to answer." rows={myQuestions} s={state} me={me} act={act} demoMode={voiceMode}/>}
       {page==='agenda'&&<QuestionInbox title="Pending team questions" description="Questions from your direct reports that still need an answer." rows={agendaRows} s={state} me={me} act={act} overlap demoMode={voiceMode}/>}
       {page==='acceptance'&&<Acceptance s={state} pending={pending} me={me} act={act} open={openTask}/>}
@@ -499,7 +512,7 @@ function HelpDrawer({panel,onClose,onStart,switchToManager}:{panel:HelpPanel;onC
           <li>Remove a suggested question that does not belong.</li>
           <li>Confirm a matching answer from the library when one is available.</li>
           <li>Review what will be shared and click <strong>Send handoff</strong>.</li>
-          <li>Switch to the recipient and open the task on their dashboard.</li>
+          <li>Use <strong>Viewing as</strong> to select the recipient and open the task. Finish the demo to return to Shashank’s dashboard.</li>
         </ol>
         {switchToManager&&<p>The demo opens in Shashank’s manager view so you can assign a task.</p>}
         <Button kind="primary" onClick={onStart}><Play size={15}/>Start demo</Button>
@@ -515,7 +528,7 @@ function DemoCoach({step,title,children,onClose,target,action}:{step:number;titl
       const control=document.getElementById(target);
       if(!control)return;
       const bounds=control.getBoundingClientRect();
-      if(bounds.top<110||bounds.bottom>window.innerHeight-24)control.scrollIntoView({block:'center',behavior:'auto'});
+      if(!control.closest('.topbar')&&(bounds.top<110||bounds.bottom>window.innerHeight-24))control.scrollIntoView({block:'center',behavior:'auto'});
       control.focus({preventScroll:true});
     });
     return ()=>cancelAnimationFrame(frame);

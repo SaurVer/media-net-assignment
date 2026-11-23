@@ -1218,3 +1218,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
 }
 .handoff-context:has(#demo-shared-context) { border-color:#649474; }
 #demo-shared-context { scroll-margin-top:calc(var(--header) + 16px); }
+
+.viewer-control { position:relative; }
+.viewer-control>.demo-coach {
+  position:absolute; inset:calc(100% + 13px) 0 auto auto;
+  width:min(320px,calc(100vw - 24px)); margin:0;
+}
+.topbar .person-switch.demo-viewer-highlight {
+  padding:4px 20px 4px 5px; border-radius:8px;
+  outline:2px solid #21533a; outline-offset:2px;
+  background:#e8f4ea; box-shadow:0 0 0 6px #bde0c3;
+}
+.topbar .person-switch.demo-viewer-highlight>svg { right:4px; color:#21533a; }
+.topbar .person-switch.demo-viewer-highlight select { cursor:pointer; }
