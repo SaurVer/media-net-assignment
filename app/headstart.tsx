@@ -13,7 +13,7 @@ import {advance,dayKey,localAt,nextStart,onShift,shiftDay,shortTime,zone} from '
 import {Mark} from './mark';
 
 type Page='home'|'outbox'|'review'|'sent'|'agenda'|'acceptance'|'tasks'|'questions'|'people'|'library'|'metrics'|'settings'|'api'|'detail';
-type DemoStep='assign'|'brief'|'predict'|'review'|'sent';
+type DemoStep='assign'|'brief'|'predict'|'review'|'sent'|'analyst-home'|'analyst-task';
 const demoInstruction='demo-coach-instruction';
 type HelpPanel='concept'|'demo';
 type ComposeDraft={text:string;assigneeId:string;urgent:boolean;createdAt?:string};
@@ -310,6 +310,11 @@ export default function Headstart(){
     else go('home');
     setDemo('assign');
   }
+  function showDemoRecipient(t:Task){
+    viewAs(getPersona(state,t.assigneeId));
+    setDetail(t.id);
+    setDemo('analyst-home');
+  }
   function selectTeam(id:string){
     const p=state.people.find(p=>p.teamId===id&&p.canAssign);
     if(p)viewAs(p);
@@ -320,7 +325,9 @@ export default function Headstart(){
     detailScroll.current=window.scrollY;
     setDetailOrigin(page==='detail'?detailOrigin:page);
     setDetail(taskId);
-    go('detail');
+    const guided=demo==='analyst-home'&&taskId===detail;
+    go('detail',guided);
+    if(guided)setDemo('analyst-task');
     if(t.assigneeId===viewer&&t.status==='new')await act('tasks/'+taskId+'/start');
   }
   async function begin(text:string,assigneeId:string,urgent:boolean){
@@ -397,17 +404,18 @@ export default function Headstart(){
     <main className="main"><div className={`main-inner ${widePage?'wide-workspace':''}`}>
       <div className="breadcrumbs"><span>{teamName}</span><ChevronRight size={13}/><strong>{labels[page]}</strong></div>
       {globalError&&!composerOpen&&<div className="banner orange" role="alert"><span>{globalError}</span><button aria-label="Dismiss error" onClick={()=>setGlobalError('')}><X size={15}/></button></div>}
-      {(page==='home'||page==='detail'&&detailOrigin==='home')&&<div hidden={page!=='home'}><HomeSummary key={viewer} s={state} me={me} rows={me.canAssign?outgoing:incoming} drafts={openItems} composer={filteredComposer} open={openTask} onAssign={()=>{setGlobalError('');setComposerOpen(true);if(demo==='assign')setDemo('brief');}} demoAssign={demo==='assign'} onStopDemo={stopDemo} onOpenItems={()=>go('outbox')} historyControl={historyControl} period={period}/></div>}
+      {(page==='home'||page==='detail'&&detailOrigin==='home')&&<div hidden={page!=='home'}><HomeSummary key={viewer} s={state} me={me} rows={me.canAssign?outgoing:incoming} drafts={openItems} composer={filteredComposer} open={openTask} onAssign={()=>{setGlobalError('');setComposerOpen(true);if(demo==='assign')setDemo('brief');}} demoAssign={demo==='assign'} demoIncoming={demo==='analyst-home'?selected:undefined} onStopDemo={stopDemo} onOpenItems={()=>go('outbox')} historyControl={historyControl} period={period}/></div>}
       {composerOpen&&<Assign key={me.id} state={state} me={me} teammates={teammates} defaultAssignee={defaultAssignee} onBegin={begin} reading={reading} demoMode={voiceMode} composer={composer} onEdit={value=>setComposers(previous=>({...previous,[viewer]:{...value,createdAt:previous[viewer]?.text.trim()?previous[viewer].createdAt??now:now}}))} onClose={()=>{setComposerOpen(false);setGlobalError('');stopDemo();}} globalError={globalError} demo={demo} onDemoBrief={()=>setDemo('predict')} onStopDemo={stopDemo}/>}
       {page==='outbox'&&<OpenItems s={state} tasks={openItems} composer={filteredComposer} historyControl={historyControl} onCompose={()=>setComposerOpen(true)} onResume={openDraft}/>}
       {page==='review'&&draft&&<Review key={draft.id} s={state} t={draft} act={act} onSend={()=>void sendDraft(draft)} goBack={()=>go('outbox')} demoReview={demo==='review'} onStopDemo={stopDemo} started={started} busy={busy} demoMode={voiceMode} predicting={predicting===draft.id} animate={predictionRun===draft.id} onPredict={(settings,endpoint)=>runPrediction(draft.id,settings,endpoint)} notes={draftNotes[draft.id]??emptyDraftNotes} setNotes={update=>setDraftNotes(previous=>({...previous,[draft.id]:update(previous[draft.id]??emptyDraftNotes)}))}/>}
       {page==='review'&&!draft&&<><Title title="Task draft"/><Empty>This draft has already been sent.</Empty><Button onClick={()=>go('outbox')}>Open items</Button></>}
       {(page==='sent'||page==='detail'&&detailOrigin==='sent')&&<div hidden={page!=='sent'}><TaskList key={viewer+'sent'} title="Sent tasks" description="Track delivery, open questions, and work ready for acceptance." rows={outgoing} historyControl={historyControl} s={state} open={openTask} mode="sent"><Button kind="primary" onClick={()=>setComposerOpen(true)}><Plus size={16}/>Assign new task</Button></TaskList></div>}
       {(page==='tasks'||page==='detail'&&detailOrigin==='tasks')&&<div hidden={page!=='tasks'}><TaskList key={viewer+'tasks'} title="My tasks" description="See shared handoffs and open work you can send for acceptance." rows={incoming} historyControl={historyControl} s={state} open={openTask} mode="received"/></div>}
-      {page==='detail'&&selected&&demo==='sent'&&<DemoCoach step={6} title="Handoff sent" onClose={stopDemo} action={<Button kind="primary" className="small" onClick={stopDemo}>Finish demo</Button>}>
-        {getPersona(state,selected.assigneeId).name} can open the task and see the answers and nominees you included.
+      {page==='detail'&&selected&&demo==='sent'&&<DemoCoach step={9} title="See the handoff as your teammate" onClose={stopDemo}
+        action={<Button kind="primary" className="small" onClick={()=>showDemoRecipient(selected)}>View as {getPersona(state,selected.assigneeId).name}<ArrowRight size={14}/></Button>}>
+        The handoff is sent. Switch to the recipient’s profile to see where it arrived and what they can read.
       </DemoCoach>}
-      {page==='detail'&&selected&&<TaskDetail key={selected.id+me.id} s={state} t={selected} me={me} act={act} backLabel={labels[detailOrigin]??'Home'} back={()=>{go(detailOrigin);requestAnimationFrame(()=>window.scrollTo(0,detailScroll.current));}}/>}
+      {page==='detail'&&selected&&<TaskDetail key={selected.id+me.id} s={state} t={selected} me={me} act={act} demoRecipient={demo==='analyst-task'} onStopDemo={stopDemo} backLabel={labels[detailOrigin]??'Home'} back={()=>{go(detailOrigin);requestAnimationFrame(()=>window.scrollTo(0,detailScroll.current));}}/>}
       {page==='questions'&&<QuestionInbox title="Questions for me" description="Questions teammates have sent you or nominated you to answer." rows={myQuestions} s={state} me={me} act={act} demoMode={voiceMode}/>}
       {page==='agenda'&&<QuestionInbox title="Pending team questions" description="Questions from your direct reports that still need an answer." rows={agendaRows} s={state} me={me} act={act} overlap demoMode={voiceMode}/>}
       {page==='acceptance'&&<Acceptance s={state} pending={pending} me={me} act={act} open={openTask}/>}
@@ -470,10 +478,14 @@ function HelpDrawer({panel,onClose,onStart,switchToManager}:{panel:HelpPanel;onC
       </header>
       {isConcept?<div className="help-drawer-copy">
         <h2 id="help-heading">Concept note</h2>
-        <p>Headstart helps teammates start work with fewer follow-ups. It reads a task brief, predicts what the assignee might ask, and suggests answers or people to ask. The sender reviews what goes into the handoff.</p>
+        <p>A task can be clear to the person assigning it and still leave the recipient waiting for details. That delay can cost an entire shift when teammates work in different time zones.</p>
         <section>
-          <h3>When it helps</h3>
-          <p>Shashank asks Devarshi to investigate a drop in search click-through rate. They work in different time zones. With the date range, device breakdown, and expected output in the handoff, Devarshi can start before their working hours overlap.</p>
+          <h3>How Headstart works</h3>
+          <p>Write the brief and choose a teammate. Headstart predicts their likely questions, drafts answers, and brings in relevant answers from past handoffs. Review what applies, remove distractions, and nominate someone who can help with the questions that still need a person.</p>
+        </section>
+        <section>
+          <h3>Example across time zones</h3>
+          <p>Shashank asks Devarshi to investigate a drop in search click-through rate. He confirms the reporting period and device split, reuses the team’s metric definition, and nominates a teammate who can clarify a data source. Devarshi sees that context with the task and can start before their working hours overlap.</p>
         </section>
       </div>:<div className="help-drawer-copy">
         <h2 id="help-heading">Demo guide</h2>
@@ -484,7 +496,10 @@ function HelpDrawer({panel,onClose,onStart,switchToManager}:{panel:HelpPanel;onC
           <li>Click <strong>Predict questions</strong> to create the draft.</li>
           <li>Read a suggested answer and click <strong>Accept this answer</strong>.</li>
           <li><strong>Nominate</strong> a teammate who can clarify a question.</li>
+          <li>Remove a suggested question that does not belong.</li>
+          <li>Confirm a matching answer from the library when one is available.</li>
           <li>Review what will be shared and click <strong>Send handoff</strong>.</li>
+          <li>Switch to the recipient and open the task on their dashboard.</li>
         </ol>
         {switchToManager&&<p>The demo opens in Shashank’s manager view so you can assign a task.</p>}
         <Button kind="primary" onClick={onStart}><Play size={15}/>Start demo</Button>
@@ -506,13 +521,13 @@ function DemoCoach({step,title,children,onClose,target,action}:{step:number;titl
     return ()=>cancelAnimationFrame(frame);
   },[target]);
   return <aside className="demo-coach" aria-label="Handoff demo">
-    <div className="demo-coach-top"><span>Demo · Step {step} of 6</span><button type="button" className="icon-button" aria-label="Exit demo" onClick={onClose}><X size={14}/></button></div>
+    <div className="demo-coach-top"><span>Demo · Step {step} of 9</span><button type="button" className="icon-button" aria-label="Exit demo" onClick={onClose}><X size={14}/></button></div>
     <div id={demoInstruction} aria-live="polite"><h3>{title}</h3><p>{children}</p></div>
     {action&&<div className="demo-coach-action">{action}</div>}
   </aside>;
 }
 
-function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,historyControl,period,demoAssign,onStopDemo}:{s:State;me:Person;rows:Task[];drafts:Task[];composer?:ComposeDraft;open:(id:string)=>void;onAssign:()=>void;onOpenItems:()=>void;historyControl:ReactNode;period:HistoryPeriod;demoAssign:boolean;onStopDemo:()=>void}){
+function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,historyControl,period,demoAssign,demoIncoming,onStopDemo}:{s:State;me:Person;rows:Task[];drafts:Task[];composer?:ComposeDraft;open:(id:string)=>void;onAssign:()=>void;onOpenItems:()=>void;historyControl:ReactNode;period:HistoryPeriod;demoAssign:boolean;demoIncoming?:Task;onStopDemo:()=>void}){
   const [recipient,setRecipient]=useState('');
   const [showAll,setShowAll]=useState(false);
   const groups=new Map<string,Task[]>();
@@ -524,6 +539,7 @@ function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,histor
   }
   const selected=groups.has(recipient)?recipient:'';
   const activeRows=selected?groups.get(selected)!:rows;
+  const displayRows=demoIncoming?[demoIncoming,...activeRows.filter(t=>t.id!==demoIncoming.id)]:activeRows;
   const taskIds=new Set(activeRows.map(t=>t.id));
   const questions=s.questions.filter(q=>taskIds.has(q.taskId)&&q.createdAt<=s.now);
   const aggregate=questionActivity(questions,s.now);
@@ -561,9 +577,11 @@ function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,histor
         </ol>
       </div>}
       <section className="panel task-overview"><div className="panel-head spread"><h2>{selected?`${label} ${getPersona(s,selected).name}`:'Recent handoffs'}</h2>{selected&&<button type="button" className="link-button" onClick={()=>{setRecipient('');setShowAll(false);}}>Show all people</button>}</div>
-        {activeRows.length?<><div className="overview-table-head"><span>Task</span><span>{label}</span><span>Question activity</span><span>Status</span></div>{activeRows.slice(0,showAll?activeRows.length:7).map(task=>{
-          const activity=questionActivity(perTask.get(task.id)??[],s.now);
-          return <button type="button" className="overview-task" key={task.id} onClick={()=>open(task.id)}><span><strong>{task.text}</strong><small>{dateTime(task.sentAt!)}{task.status==='queued'&&task.deliveredAt?` · Notifies ${dateTime(task.deliveredAt)}`:''}</small></span><span className="overview-person"><PersonTag p={getPersona(s,me.canAssign?task.assigneeId:task.assignerId)} now={s.now} compact/></span><span className="overview-question-counts"><small>System predicted <b>{activity.predicted}</b> {activity.predicted===1?'question':'questions'}</small><small>Additional questions added <b>{activity.followups}</b></small><small>People nominated <b>{activity.nominees.size}</b></small>{activity.retrospective>0&&<small className="historical-activity">Predicted after sending</small>}</span><PillStatus t={task}/></button>;
+        {demoIncoming&&<DemoCoach step={9} title="Open the handoff from the dashboard" target="demo-received-task" onClose={onStopDemo}>You’re viewing as <strong>{me.name}</strong>. Open the highlighted task to see the answers and people shared with it.</DemoCoach>}
+        {displayRows.length?<><div className="overview-table-head"><span>Task</span><span>{label}</span><span>Question activity</span><span>Status</span></div>{displayRows.slice(0,showAll?displayRows.length:7).map(task=>{
+          const guided=task.id===demoIncoming?.id;
+          const activity=questionActivity(perTask.get(task.id)??(guided?s.questions.filter(q=>q.taskId===task.id&&q.createdAt<=s.now):[]),s.now);
+          return <button type="button" id={guided?'demo-received-task':undefined} aria-describedby={guided?demoInstruction:undefined} className={`overview-task ${guided?'demo-highlight':''}`} key={task.id} onClick={()=>open(task.id)}><span><strong>{task.text}</strong><small>{dateTime(task.sentAt!)}{task.status==='queued'&&task.deliveredAt?` · Notifies ${dateTime(task.deliveredAt)}`:''}</small></span><span className="overview-person"><PersonTag p={getPersona(s,me.canAssign&&!guided?task.assigneeId:task.assignerId)} now={s.now} compact/></span><span className="overview-question-counts"><small>System predicted <b>{activity.predicted}</b> {activity.predicted===1?'question':'questions'}</small><small>Additional questions added <b>{activity.followups}</b></small><small>People nominated <b>{activity.nominees.size}</b></small>{activity.retrospective>0&&<small className="historical-activity">Predicted after sending</small>}</span><PillStatus t={task}/></button>;
         })}{activeRows.length>7&&<div className="overview-more"><button type="button" className="link-button" onClick={()=>setShowAll(!showAll)}>{showAll?'Show fewer':'Show more in this period'}<ChevronDown size={14}/></button></div>}</>:<Empty>No handoffs in this period.</Empty>}
       </section>
       <aside className="home-insights" aria-label="Handoff activity">
@@ -730,16 +748,22 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
     void onPredict(settings,endpoint);
   }
   const toolbarDisabled=busy||predicting||revealing||confirming;
-  const hasDemoAnswer=demoReview&&active.some(q=>q.source==='predicted'&&q.answer);
-  const hasDemoNominee=demoReview&&active.some(q=>nomineeIdsFor(q).length>0);
-  const demoAnswer=demoReview&&!predicting&&!revealing&&!hasDemoAnswer
+  const reviewReady=demoReview&&!predicting&&!revealing;
+  const hasDemoAnswer=active.some(q=>q.source==='predicted'&&q.answer);
+  const hasDemoNominee=active.some(q=>nomineeIdsFor(q).length>0);
+  const demoAnswer=reviewReady&&!hasDemoAnswer
     ?active.find(q=>q.source==='predicted'&&!q.answer&&(q.suggestedAnswer??suggestAnswer(t,q.text)))
     :undefined;
-  const demoNomination=demoReview&&!predicting&&!revealing&&!demoAnswer&&!hasDemoNominee
+  const demoNomination=reviewReady&&!demoAnswer&&!hasDemoNominee&&nominationCandidates(s,t).length>0
     ?active.find(q=>!q.answer)??active[0]
     :undefined;
-  const demoSend=demoReview&&!predicting&&!revealing&&hasDemoAnswer&&hasDemoNominee;
-
+  const demoRemoval=reviewReady&&!demoAnswer&&!demoNomination&&!removed.length
+    ?active.find(q=>q.source==='predicted'&&!q.answer&&!nomineeIdsFor(q).length)
+    :undefined;
+  const demoLibrary=reviewReady&&!demoAnswer&&!demoNomination&&!demoRemoval&&!confirmedLibrary.length
+    ?libraryIds[0]
+    :undefined;
+  const demoSend=reviewReady&&total>0&&!demoAnswer&&!demoNomination&&!demoRemoval&&!demoLibrary;
   const unverifiedEdits=active.filter(q=>notes.answers[q.id]?.requiresVerification&&notes.answers[q.id]?.text?.trim()).length;
   const hasUnsavedForm=Boolean(notes.custom?.trim()||notes.customAnswer?.trim()||notes.customNominees?.length||active.some(q=>notes.extraAnswers?.[q.id]?.text.trim()));
   const [addingQuestion,setAddingQuestion]=useState(false);
@@ -759,7 +783,7 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
     setAdd(false);
     setNotes(prev=>({...prev,custom:undefined,customAnswer:undefined,customNominees:undefined}));
   }
-  const reviewQuestion=(q:Question,number:number,animateQuestion=false)=><ReviewQuestion key={q.id} number={number} animate={animateQuestion} q={q} s={s} t={t} act={act} demoMode={localDemo} edit={notes.answers[q.id]} onEdit={value=>editQuestion(q.id,value)} onSave={value=>saveQuestion(q.id,value)} onCancel={()=>clearEdit(q.id)} additionalDraft={notes.extraAnswers?.[q.id]} onAdditionalEdit={value=>editAdditional(q.id,value)} selectable={clarificationIds.includes(q.id)} selected={checked(q.id)} onSelect={()=>toggle(q.id)} demoAction={q.id===demoAnswer?.id?'answer':q.id===demoNomination?.id?'nominate':undefined} onStopDemo={onStopDemo}/>;
+  const reviewQuestion=(q:Question,number:number,animateQuestion=false)=><ReviewQuestion key={q.id} number={number} animate={animateQuestion} q={q} s={s} t={t} act={act} demoMode={localDemo} edit={notes.answers[q.id]} onEdit={value=>editQuestion(q.id,value)} onSave={value=>saveQuestion(q.id,value)} onCancel={()=>clearEdit(q.id)} additionalDraft={notes.extraAnswers?.[q.id]} onAdditionalEdit={value=>editAdditional(q.id,value)} selectable={clarificationIds.includes(q.id)} selected={checked(q.id)} onSelect={()=>toggle(q.id)} demoAction={q.id===demoAnswer?.id?'answer':q.id===demoNomination?.id?'nominate':q.id===demoRemoval?.id?'remove':undefined} onStopDemo={onStopDemo}/>;
   return <>
     <button className="link-button back" onClick={goBack}><ArrowLeft size={15}/>Open items</button>
     <Title title="Task draft" description="Verify suggested answers and choose who can help before sending."><span className="saved-stamp"><Check size={15}/> Saved in Open items</span></Title>
@@ -812,28 +836,32 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
           {confirmMessage&&<p className="confirmation-result" role="status">{confirmMessage}{confirmedLibrary.length>0&&<> <a className="link-button" href="#confirmed-existing">View confirmed existing answers</a></>}</p>}
           {removed.length>0&&<details className="parked-questions"><summary>Removed from question set ({removed.length})</summary>{removed.map(q=><div className="row spread" key={q.id}><span>{q.text}</span><button type="button" className="link-button" onClick={()=>void act('questions/'+q.id+'/remove',{},'DELETE')}>Undo removal</button></div>)}</details>}
         </section>
-        {!predicting&&!revealing&&libraryToReview.length>0&&<LibraryMatches s={s} matches={libraryToReview} act={act} bulk={bulk('library',libraryIds)} selected={checked} onSelect={toggle} onConfirm={id=>bulkConfirm('library',[id])} confirming={confirming}/>}
+        {!predicting&&!revealing&&libraryToReview.length>0&&<LibraryMatches s={s} matches={libraryToReview} act={act} bulk={bulk('library',libraryIds)} selected={checked} onSelect={toggle} onConfirm={id=>bulkConfirm('library',[id])} confirming={confirming} demoId={demoLibrary} onStopDemo={onStopDemo}/>}
       </div>
       <aside className="review-aside">
-        <section className="delivery-route send-route" id="handoff-send"><div className="route-heading"><span className="eyebrow"><Send size={15}/> Handoff preview</span><span>{dateLabel(delivery)}</span></div><div className="send-route-body"><span className="eyebrow">To {receiver.name}</span><strong>{wait?<>{shortTime(delivery)} <small>IST</small></>:'When sent'}</strong><p>{wait?`${receiver.name} can open the handoff immediately. Their notification is scheduled for their next shift.`:t.urgent?'Your teammate can open the handoff and will be notified immediately.':'Your teammate is on shift and can see the task immediately.'}</p>{(unresolved>0||libraryIds.length>0)&&<p className="unverified-note">Unused suggestions are automatically left out.</p>}{hasUnsavedForm&&<p className="unverified-note">Confirm any new questions or extra answers you want included before sending.</p>}{unverifiedEdits>0&&<p className="unverified-note">{unverifiedEdits} edited {unverifiedEdits===1?'suggestion requires':'suggestions require'} verification to be included.</p>}</div>{demoSend&&<DemoCoach step={6} title="Send the handoff" target="demo-send" onClose={onStopDemo}>Your accepted answer and nominee will be shared. You can confirm other clarifying questions too. Click <strong>Send handoff</strong> when you’re ready.</DemoCoach>}<div className="send-route-footer"><Button id="demo-send" describedBy={demoSend?demoInstruction:undefined} className={demoSend?'demo-highlight':''} kind="primary" onClick={onSend} disabled={toolbarDisabled||addingQuestion||changingAssignee}><Send size={16}/>{busy?'Sending…':'Send handoff'}</Button><Button kind="plain" onClick={goBack}>Finish later</Button></div></section>
+        <section className="delivery-route send-route" id="handoff-send"><div className="route-heading"><span className="eyebrow"><Send size={15}/> Handoff preview</span><span>{dateLabel(delivery)}</span></div><div className="send-route-body"><span className="eyebrow">To {receiver.name}</span><strong>{wait?<>{shortTime(delivery)} <small>IST</small></>:'When sent'}</strong><p>{wait?`${receiver.name} can open the handoff immediately. Their notification is scheduled for their next shift.`:t.urgent?'Your teammate can open the handoff and will be notified immediately.':'Your teammate is on shift and can see the task immediately.'}</p>{(unresolved>0||libraryIds.length>0)&&<p className="unverified-note">Unused suggestions are automatically left out.</p>}{hasUnsavedForm&&<p className="unverified-note">Confirm any new questions or extra answers you want included before sending.</p>}{unverifiedEdits>0&&<p className="unverified-note">{unverifiedEdits} edited {unverifiedEdits===1?'suggestion requires':'suggestions require'} verification to be included.</p>}</div>{demoSend&&<DemoCoach step={8} title="Send the handoff" target="demo-send" onClose={onStopDemo}>
+          Review the preview and click <strong>Send handoff</strong>. {confirmedLibrary.length?'Your confirmed library answer will be included.':!libraryIds.length?'There’s no matching library answer to confirm for this brief.':'You can confirm more answers before sending.'}
+        </DemoCoach>}<div className="send-route-footer"><Button id="demo-send" describedBy={demoSend?demoInstruction:undefined} className={demoSend?'demo-highlight':''} kind="primary" onClick={onSend} disabled={toolbarDisabled||addingQuestion||changingAssignee}><Send size={16}/>{busy?'Sending…':'Send handoff'}</Button><Button kind="plain" onClick={goBack}>Finish later</Button></div></section>
         <div className="review-preferences"><span className="timer"><Clock3 size={14}/> Time on task <strong>{Math.floor(elapsed/60)}m {String(elapsed%60).padStart(2,'0')}s</strong></span><label className="aside-option"><input type="checkbox" checked={localDemo} onChange={e=>setLocalDemo(e.target.checked)}/> Demo dictation</label></div>
       </aside>
     </div>
   </>;
 }
-function LibraryMatches({s,matches,act,bulk,selected,onSelect,onConfirm,confirming}:{s:State;matches:Question[];act:Act;bulk:ReactNode;selected:(id:string)=>boolean;onSelect:(id:string)=>void;onConfirm:(id:string)=>Promise<void>;confirming:boolean}){
+function LibraryMatches({s,matches,act,bulk,selected,onSelect,onConfirm,confirming,demoId,onStopDemo}:{s:State;matches:Question[];act:Act;bulk:ReactNode;selected:(id:string)=>boolean;onSelect:(id:string)=>void;onConfirm:(id:string)=>Promise<void>;confirming:boolean;demoId?:string;onStopDemo:()=>void}){
   return <section className="library-matches" id="saved-library-answers" aria-labelledby="library-match-title">
     <div className="stream-heading library-heading"><BookOpen size={17}/><h2 id="library-match-title">Questions with existing answers</h2><span>Confirm the answers that still apply.</span></div>
     {matches.map(q=>{
       const entry=s.library.find(e=>e.id===q.libraryId);
       const removed=q.status==='removed';
       const path='questions/'+q.id+'/remove';
+      const guided=q.id===demoId;
       return <article className={`library-match ${removed?'excluded':''}`} key={q.id}>
         <div className="row spread align-top"><h3>{!removed&&!q.libraryConfirmed&&<input type="checkbox" aria-label={`Select library answer for ${q.text}`} checked={selected(q.id)} onChange={()=>onSelect(q.id)}/>} {q.text}</h3><Chip tone={removed?'':q.libraryConfirmed?'green':'amber'}>{removed?'Excluded':q.libraryConfirmed?'Included in handoff':'Needs confirmation'}</Chip></div>
         <p className="answer-text">{q.answer}</p>
+        {guided&&<DemoCoach step={7} title="Reuse an existing answer" target="demo-confirm-existing" onClose={onStopDemo}>Click <strong>Confirm answer</strong> to include this saved answer in the handoff.</DemoCoach>}
         <div className="row spread wrap">
           <span className="library-match-source">Saved answer{q.answeredById&&` by ${getPersona(s,q.answeredById).name}`}{entry&&` · ${types[entry.taskType]}`}</span>
-          <div className="row wrap">{!removed&&!q.libraryConfirmed&&<Button className="small" onClick={()=>void onConfirm(q.id)} disabled={confirming}><Check size={14}/>Confirm answer</Button>}<button type="button" className="link-button" onClick={()=>void act(path,{},removed?'DELETE':'POST')}>{removed?'Restore to review':'Leave out'}</button></div>
+          <div className="row wrap">{!removed&&!q.libraryConfirmed&&<Button id={guided?'demo-confirm-existing':undefined} describedBy={guided?demoInstruction:undefined} className={`small ${guided?'demo-highlight':''}`} onClick={()=>void onConfirm(q.id)} disabled={confirming}><Check size={14}/>Confirm answer</Button>}<button type="button" className="link-button" onClick={()=>void act(path,{},removed?'DELETE':'POST')}>{removed?'Restore to review':'Leave out'}</button></div>
         </div>
         {entry&&entry.question!==q.text&&<p className="library-match-source">Matched library question: {entry.question}</p>}
       </article>;
@@ -853,7 +881,7 @@ function NomineePicker({id,people,selected,disabled,onToggle,demoTarget}:{id?:st
     {people.length?<div className="nominee-options">{people.map((p,index)=><label key={p.id} className={demoTarget&&index===0?'demo-highlight':undefined}><input id={demoTarget&&index===0?'demo-pick-nominee':undefined} aria-describedby={demoTarget&&index===0?demoInstruction:undefined} type="checkbox" checked={selected.includes(p.id)} onChange={()=>onToggle(p.id)}/><span>{p.name}</span></label>)}</div>:<p>No other teammates are available for nomination.</p>}
   </fieldset>;
 }
-function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,onCancel,additionalDraft,onAdditionalEdit,selectable,selected,onSelect,demoAction,onStopDemo}:{q:Question;s:State;t:Task;act:Act;demoMode:boolean;number:number;animate?:boolean;edit?:ContextDraft;onEdit:(value:ContextDraft)=>void;onSave:(value:ContextDraft)=>Promise<unknown>;onCancel:()=>void;additionalDraft?:AdditionalAnswerDraft;onAdditionalEdit:(value?:AdditionalAnswerDraft)=>void;selectable:boolean;selected:boolean;onSelect:()=>void;demoAction?:'answer'|'nominate';onStopDemo:()=>void}){
+function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,onCancel,additionalDraft,onAdditionalEdit,selectable,selected,onSelect,demoAction,onStopDemo}:{q:Question;s:State;t:Task;act:Act;demoMode:boolean;number:number;animate?:boolean;edit?:ContextDraft;onEdit:(value:ContextDraft)=>void;onSave:(value:ContextDraft)=>Promise<unknown>;onCancel:()=>void;additionalDraft?:AdditionalAnswerDraft;onAdditionalEdit:(value?:AdditionalAnswerDraft)=>void;selectable:boolean;selected:boolean;onSelect:()=>void;demoAction?:'answer'|'nominate'|'remove';onStopDemo:()=>void}){
   const [editing,setEditing]=useState(false);
   const [saving,setSaving]=useState(false);
   const [nominationOpen,setNominationOpen]=useState(false);
@@ -907,7 +935,8 @@ function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,on
   return <article className={`question-row review-question ${animate?'revealed':''}`}>
     <span className="question-index">{String(number).padStart(2,'0')}</span>
     <div className="question-main">
-      <div className="row spread align-top"><div><h3>{selectable&&<input type="checkbox" aria-label={`Select clarification answer for ${q.text}`} checked={selected} onChange={onSelect}/>} {q.text}</h3>{q.reason&&<p className="reason">{q.reason}</p>}</div><button type="button" className="remove-link" onClick={()=>void act(path+'/remove')}><X size={13}/> Remove from question set</button></div>
+      {demoAction==='remove'&&<DemoCoach step={6} title="Remove an unneeded question" target="demo-remove-question" onClose={onStopDemo}>Click <strong>Remove from question set</strong> on this example. You can restore it from <strong>Removed from question set</strong> before sending.</DemoCoach>}
+      <div className="row spread align-top"><div><h3>{selectable&&<input type="checkbox" aria-label={`Select clarification answer for ${q.text}`} checked={selected} onChange={onSelect}/>} {q.text}</h3>{q.reason&&<p className="reason">{q.reason}</p>}</div><button type="button" id={demoAction==='remove'?'demo-remove-question':undefined} aria-describedby={demoAction==='remove'?demoInstruction:undefined} className={`remove-link ${demoAction==='remove'?'demo-highlight':''}`} onClick={()=>void act(path+'/remove')}><X size={13}/> Remove from question set</button></div>
 
       <div className="question-nominations">
         {demoAction==='nominate'&&<DemoCoach step={5} title="Choose someone who can clarify" target={demoPick?'demo-pick-nominee':demoSuggested?'demo-nominate-suggested':'demo-open-nominees'} onClose={onStopDemo}>
@@ -964,7 +993,7 @@ function TaskList({title,description,rows,s,open,mode,children,historyControl}:{
         {limit<visible.length&&<div className="list-padding"><Button onClick={()=>setLimit(limit+20)}>Show more tasks</Button></div>}</>:<Empty>{search?'No tasks match this search.':mode==='received'?'Nothing waiting for you. New work appears here when someone sends it.':'No handoffs in this view yet.'}</Empty>}
     </section></>;
 }
-function TaskDetail({s,t,me,act,back,backLabel}:{s:State;t:Task;me:Person;act:Act;back:()=>void;backLabel:string}){
+function TaskDetail({s,t,me,act,back,backLabel,demoRecipient,onStopDemo}:{s:State;t:Task;me:Person;act:Act;back:()=>void;backLabel:string;demoRecipient:boolean;onStopDemo:()=>void}){
   const [asked,setAsked]=useState('');
   const [acceptanceNote,setAcceptanceNote]=useState('');
   const [submitting,setSubmitting]=useState(false);
@@ -1023,7 +1052,7 @@ function TaskDetail({s,t,me,act,back,backLabel}:{s:State;t:Task;me:Person;act:Ac
       </form>
     </section>}
     {isAssignee&&t.status==='acceptance_requested'&&<div className="banner amber"><strong>Sent for review</strong><span>Waiting for {getPersona(s,t.assignerId).name} to respond.</span></div>}
-    <section className="panel detail-questions handoff-context"><div className="panel-head"><span className="icon-square"><MessageSquare size={18}/></span><div><h2>Questions shared at handoff</h2><p>Predicted and added questions, answers, and people to ask.</p></div></div>{handoffRows.length?handoffRows.map(q=><AnswerRead key={q.id} s={s} t={t} q={q} act={act} editable={editable}/>):<Empty>There are no questions attached to this handoff.</Empty>}</section>
+    <section className="panel detail-questions handoff-context"><div className="panel-head"><span className="icon-square"><MessageSquare size={18}/></span><div><h2 id={demoRecipient?'demo-shared-context':undefined} tabIndex={demoRecipient?-1:undefined}>Questions shared at handoff</h2><p>Predicted and added questions, answers, and people to ask.</p></div></div>{demoRecipient&&<DemoCoach step={9} title="This is what the recipient gets" target="demo-shared-context" onClose={onStopDemo} action={<Button kind="primary" className="small" onClick={onStopDemo}>Finish demo</Button>}>The answers and nominees are already here. Use <strong>Ask a question</strong> below if you need more detail.</DemoCoach>}{handoffRows.length?handoffRows.map(q=><AnswerRead key={q.id} s={s} t={t} q={q} act={act} editable={editable}/>):<Empty>There are no questions attached to this handoff.</Empty>}</section>
     {retrospective.length>0&&<section className="panel detail-questions handoff-context"><div className="panel-head"><span className="icon-square"><Sparkles size={18}/></span><div><h2>Questions predicted for this past task</h2><p>Headstart generated these after the task was sent.</p></div></div><ul className="retrospective-questions">{retrospective.map(q=><li key={q.id}>{q.text}</li>)}</ul></section>}
     <section className="panel detail-questions assignee-context"><div className="panel-head"><span className="icon-square"><CornerDownRight size={18}/></span><div><h2>{isAssignee?'Your follow-up questions':'Assignee follow-up questions'}</h2><p>New questions asked after the handoff, with their replies or routes.</p></div></div>{askedRows.length?askedRows.map(q=><AnswerRead key={q.id} s={s} t={t} q={q} act={act} editable={editable}/>):<div className="list-padding muted">No follow-up questions yet.</div>}
       {editable&&<form className="list-padding ask-form" onSubmit={async e=>{e.preventDefault();if(asked.trim()&&await act('tasks/'+t.id+'/questions',{text:asked}))setAsked('');}}><label className="field"><span>Ask a question</span><textarea value={asked} onChange={e=>setAsked(e.target.value)} aria-label="Ask a question" placeholder="What do you need to move forward?" rows={2}/></label><Button type="submit" kind="primary" disabled={!asked.trim()}>Ask</Button></form>}

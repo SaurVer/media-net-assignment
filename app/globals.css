@@ -1182,9 +1182,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
 .demo-coach-action { margin-top:7px; }
 .assignment-modal .demo-coach { margin:8px 12px; width:min(calc(100% - 24px),345px); }
 .assignment-modal form>.demo-coach { margin-left:auto; margin-right:19px; }
-.app :is(.button,.link-button,.suggested-person,label).demo-highlight,
-.app :is(.button,.link-button,.suggested-person,label).demo-highlight:hover,
-.app :is(.button,.link-button,.suggested-person,label).demo-highlight:focus-visible {
+.app :is(.button,.link-button,.suggested-person,.remove-link,label).demo-highlight,
+.app :is(.button,.link-button,.suggested-person,.remove-link,label).demo-highlight:hover,
+.app :is(.button,.link-button,.suggested-person,.remove-link,label).demo-highlight:focus-visible {
   background:#21533a; border-color:#21533a; color:#fff;
   outline:2px solid #21533a; outline-offset:3px;
   box-shadow:0 0 0 8px #bde0c3;
@@ -1207,5 +1207,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
   .person-switch select { max-width:78px; }
 }
 @media(prefers-reduced-motion:reduce) {
-  .help-drawer[open],.demo-coach,.app :is(.button,.link-button,.suggested-person,label).demo-highlight { animation:none; }
+  .help-drawer[open],.demo-coach,.app :is(.button,.link-button,.suggested-person,.remove-link,label).demo-highlight { animation:none; }
 }
+
+.task-overview>.demo-coach,.handoff-context>.demo-coach { margin:10px 14px; width:min(345px,calc(100% - 28px)); }
+.home-workspace .overview-task.demo-highlight {
+  background:#e8f4ea;
+  outline:2px solid #21533a;
+  outline-offset:-3px;
+}
+.handoff-context:has(#demo-shared-context) { border-color:#649474; }
+#demo-shared-context { scroll-margin-top:calc(var(--header) + 16px); }
