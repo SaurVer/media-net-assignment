@@ -1,5 +1,6 @@
 export const endpoints = [
   ['POST','/api/tasks','Create a draft handoff.'],
+  ['DELETE','/api/tasks/[id]','Delete a task and its associated questions and notifications. The assigner must provide actorId.'],
   ['POST','/api/transcribe','Accept a browser transcript, audio with STT configured, or a demo transcript.'],
   ['POST','/api/tasks/[id]/predict','Suggest questions, draft answers, and nominees. Use more: true to append up to three new questions.'],
   ['POST','/api/questions/[id]/answer','Save an assigner or nominee’s answer.'],

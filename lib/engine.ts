@@ -326,6 +326,17 @@ export function mutate(s:State,path:string[],method:string,input:Input){
     event(s,'rating',t,raterId,{score});
     return {score};
   }
+  if(resource==='tasks'&&method==='DELETE'){
+    const t=s.tasks.find(task=>task.id===id);
+    if(action||!t)throw new Error('Task not found.');
+    if(input.actorId!==t.assignerId)throw new Error('Only the assigner can delete this task.');
+    s.tasks=s.tasks.filter(task=>task.id!==t.id);
+    s.questions=s.questions.filter(question=>question.taskId!==t.id);
+    s.notifications=s.notifications.filter(notification=>notification.taskId!==t.id);
+    s.ratings=s.ratings.filter(rating=>rating.taskId!==t.id);
+    s.events=s.events.filter(entry=>entry.taskId!==t.id);
+    return {id:t.id};
+  }
   if(resource==='tasks'&&!id){
     const assigner=person(s,input.assignerId),assignee=person(s,input.assigneeId);
     if(!assigner.canAssign||assigner.teamId!==assignee.teamId||assigner.id===assignee.id)throw new Error('Choose a teammate in your workspace.');
