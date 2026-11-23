@@ -1137,8 +1137,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
   color:#573c50; font-size:12px; font-weight:650; white-space:nowrap;
 }
 .help-trigger:hover,.help-trigger:focus-visible { background:#f4eaf1; }
-.help-trigger.demo-trigger { background:#f0e6ed; }
-.help-trigger.demo-trigger:hover { background:#e8d9e4; }
+.help-trigger.demo-trigger { background:#e6efe7; color:#234936; }
+.help-trigger.demo-trigger:hover { background:#d6e8db; }
+.help-trigger[aria-expanded="true"],.help-trigger.demo-trigger[data-running="true"],.help-trigger.demo-trigger[data-running="true"]:hover {
+  background:#234936; color:#fff; box-shadow:inset 0 0 0 1px #183c2a;
+}
+.help-trigger.demo-trigger[aria-expanded="true"] svg,.help-trigger.demo-trigger[data-running="true"] svg { fill:currentColor; }
+.help-trigger:focus-visible { outline:2px solid #27543c; outline-offset:2px; }
 .help-drawer {
   position:fixed; inset:0 0 0 auto; margin:0; padding:0;
   width:min(440px,100%); max-width:none;
@@ -1163,26 +1168,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
 .help-drawer-copy .button.primary:hover,.demo-coach .button.primary:hover { background:#482941; }
 .demo-coach {
   width:min(100%,345px); padding:9px 12px 11px; margin:8px 0;
-  border:1px solid #cdb2c5; border-radius:10px;
-  background:#fffafc; color:#482941;
-  box-shadow:0 5px 18px #4b2c421c;
+  border:1px solid #88a392; border-left:4px solid #2f6248; border-radius:10px;
+  background:#f4faf5; color:#183e2b;
+  box-shadow:0 5px 18px #183e2b20;
   animation:demo-coach-enter 200ms ease-out both;
 }
 @keyframes demo-coach-enter { from { opacity:0; transform:translateY(5px); } }
 .demo-coach-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
-.demo-coach-top>span { font-size:11px; font-weight:700; color:#673f60; }
+.demo-coach-top>span { color:#204631; background:#dfede2; border-radius:4px; padding:2px 5px; font-size:11px; font-weight:700; }
 .demo-coach .icon-button { width:25px; height:25px; }
 .demo-coach h3 { font-size:14px; }
-.demo-coach p,.home-dashboard .prediction-launch .demo-coach p { font-size:12px; line-height:1.45; margin:3px 0 0; color:#523d4b; }
+.demo-coach p,.home-dashboard .prediction-launch .demo-coach p { font-size:12px; line-height:1.45; margin:3px 0 0; color:#254936; }
 .demo-coach-action { margin-top:7px; }
 .assignment-modal .demo-coach { margin:8px 12px; width:min(calc(100% - 24px),345px); }
 .assignment-modal form>.demo-coach { margin-left:auto; margin-right:19px; }
-.demo-highlight,.demo-highlight:focus-visible {
-  outline:2px solid #83517a; outline-offset:3px;
-  box-shadow:0 0 0 7px #d4a8cc66;
+.app :is(.button,.link-button,.suggested-person,label).demo-highlight,
+.app :is(.button,.link-button,.suggested-person,label).demo-highlight:hover,
+.app :is(.button,.link-button,.suggested-person,label).demo-highlight:focus-visible {
+  background:#21533a; border-color:#21533a; color:#fff;
+  outline:2px solid #21533a; outline-offset:3px;
+  box-shadow:0 0 0 8px #bde0c3;
   animation:demo-target-enter 450ms ease-out both;
 }
-@keyframes demo-target-enter { from { box-shadow:0 0 0 13px #d4a8cc99; } }
+.app .demo-highlight small,.app .demo-highlight svg { color:inherit; }
+.app .help-drawer:has(.help-drawer-copy ol) .help-drawer-icon { color:#fff; background:#21533a; }
+.app .help-drawer:has(.help-drawer-copy ol) .help-drawer-icon svg { fill:currentColor; }
+.send-route>.demo-coach { width:auto; margin:8px 12px; }
+@keyframes demo-target-enter { from { box-shadow:0 0 0 13px #bde0c3; } }
 .editor-tools .demo-highlight { padding:3px 5px; border-radius:4px; }
 @media(max-width:990px) {
   .help-trigger { width:31px; padding:0; }
@@ -1195,5 +1207,5 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Inter Variable','Inter','Sego
   .person-switch select { max-width:78px; }
 }
 @media(prefers-reduced-motion:reduce) {
-  .help-drawer[open],.demo-coach,.demo-highlight { animation:none; }
+  .help-drawer[open],.demo-coach,.app :is(.button,.link-button,.suggested-person,label).demo-highlight { animation:none; }
 }

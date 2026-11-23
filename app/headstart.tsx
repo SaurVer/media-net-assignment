@@ -13,7 +13,8 @@ import {advance,dayKey,localAt,nextStart,onShift,shiftDay,shortTime,zone} from '
 import {Mark} from './mark';
 
 type Page='home'|'outbox'|'review'|'sent'|'agenda'|'acceptance'|'tasks'|'questions'|'people'|'library'|'metrics'|'settings'|'api'|'detail';
-type DemoStep='assign'|'brief'|'predict'|'review';
+type DemoStep='assign'|'brief'|'predict'|'review'|'sent';
+const demoInstruction='demo-coach-instruction';
 type HelpPanel='concept'|'demo';
 type ComposeDraft={text:string;assigneeId:string;urgent:boolean;createdAt?:string};
 type ContextDraft={text?:string;nomineeId?:string;nomineeIds?:string[];requiresVerification?:boolean;verifySuggested?:boolean};
@@ -356,7 +357,7 @@ export default function Headstart(){
     setBusy(false);
     if(sent){
       setDraftNotes(previous=>Object.fromEntries(Object.entries(previous).filter(([key])=>key!==t.id)));
-      setDraftId('');detailScroll.current=0;setDetailOrigin('sent');setDetail(t.id);go('detail');setFlash(deliveryText(sent as unknown as Task,live.current));
+      setDraftId('');detailScroll.current=0;setDetailOrigin('sent');setDetail(t.id);go('detail',true);setDemo(step=>step==='review'?'sent':null);setFlash(deliveryText(sent as unknown as Task,live.current));
     }
   }
   async function reset(){
@@ -375,8 +376,8 @@ export default function Headstart(){
       </div>
       <div className="topbar-right">
         <div className="help-controls">
-          <button type="button" className="help-trigger" aria-haspopup="dialog" aria-label="Concept note" title="Concept note" onClick={()=>setHelp('concept')}><BookOpen size={17} aria-hidden="true"/><span>Concept note</span></button>
-          <button type="button" className="help-trigger demo-trigger" aria-haspopup="dialog" aria-label="Demo guide" title="Demo guide" onClick={()=>setHelp('demo')}><Play size={15} aria-hidden="true"/><span>Demo guide</span></button>
+          <button type="button" className="help-trigger" aria-haspopup="dialog" aria-expanded={help==='concept'} aria-label="Concept note" title="Concept note" onClick={()=>setHelp('concept')}><BookOpen size={17} aria-hidden="true"/><span>Concept note</span></button>
+          <button type="button" className="help-trigger demo-trigger" aria-haspopup="dialog" aria-expanded={help==='demo'} data-running={demo!==null} aria-label="Demo guide" title="Demo guide" onClick={()=>setHelp('demo')}><Play size={15} aria-hidden="true"/><span>Demo guide</span></button>
         </div>
         <div className="notifications-wrap"><button type="button" className="icon-button notification-button" aria-label={`Notifications, ${unread} unread`} aria-expanded={noticeOpen} onClick={()=>{setNoticeOpen(!noticeOpen);setClockOpen(false);}}><Bell size={19}/>{unread>0&&<i/>}</button>
           {noticeOpen&&<div className="popover notification-pop"><div className="popover-head"><strong>Notifications</strong><span>{unread} unread</span></div>{notifications.length?notifications.slice(0,18).map(n=><button type="button" key={n.id} className={`notification-row ${state.slack?'slack':''}`} onClick={async()=>{if(n.page==='detail'&&n.taskId)await openTask(n.taskId);else if(n.page)go(n.page as Page);await act('notifications/'+n.id);}}><span className="notification-dot">{!n.read&&<i/>}</span><span>{state.slack&&<SlackAttribution/>}{n.text}<small>{dateTime(n.at)}{n.outOfHours?' · Urgent':''}</small></span></button>):<Empty icon={Bell}>You’re all caught up.</Empty>}</div>}
@@ -403,6 +404,9 @@ export default function Headstart(){
       {page==='review'&&!draft&&<><Title title="Task draft"/><Empty>This draft has already been sent.</Empty><Button onClick={()=>go('outbox')}>Open items</Button></>}
       {(page==='sent'||page==='detail'&&detailOrigin==='sent')&&<div hidden={page!=='sent'}><TaskList key={viewer+'sent'} title="Sent tasks" description="Track delivery, open questions, and work ready for acceptance." rows={outgoing} historyControl={historyControl} s={state} open={openTask} mode="sent"><Button kind="primary" onClick={()=>setComposerOpen(true)}><Plus size={16}/>Assign new task</Button></TaskList></div>}
       {(page==='tasks'||page==='detail'&&detailOrigin==='tasks')&&<div hidden={page!=='tasks'}><TaskList key={viewer+'tasks'} title="My tasks" description="See shared handoffs and open work you can send for acceptance." rows={incoming} historyControl={historyControl} s={state} open={openTask} mode="received"/></div>}
+      {page==='detail'&&selected&&demo==='sent'&&<DemoCoach step={6} title="Handoff sent" onClose={stopDemo} action={<Button kind="primary" className="small" onClick={stopDemo}>Finish demo</Button>}>
+        {getPersona(state,selected.assigneeId).name} can open the task and see the answers and nominees you included.
+      </DemoCoach>}
       {page==='detail'&&selected&&<TaskDetail key={selected.id+me.id} s={state} t={selected} me={me} act={act} backLabel={labels[detailOrigin]??'Home'} back={()=>{go(detailOrigin);requestAnimationFrame(()=>window.scrollTo(0,detailScroll.current));}}/>}
       {page==='questions'&&<QuestionInbox title="Questions for me" description="Questions teammates have sent you or nominated you to answer." rows={myQuestions} s={state} me={me} act={act} demoMode={voiceMode}/>}
       {page==='agenda'&&<QuestionInbox title="Pending team questions" description="Questions from your direct reports that still need an answer." rows={agendaRows} s={state} me={me} act={act} overlap demoMode={voiceMode}/>}
@@ -473,13 +477,15 @@ function HelpDrawer({panel,onClose,onStart,switchToManager}:{panel:HelpPanel;onC
         </section>
       </div>:<div className="help-drawer-copy">
         <h2 id="help-heading">Demo guide</h2>
-        <p>Create a task draft and watch Headstart predict the questions your teammate might ask. The guide highlights each control as you go.</p>
+        <p>Follow the highlighted controls to send a task with answers and people your teammate can ask for help.</p>
         <ol>
           <li>Open <strong>Assign new task</strong>.</li>
           <li>Pick a teammate and load the sample task or write your own brief.</li>
           <li>Click <strong>Predict questions</strong> to create the draft.</li>
+          <li>Read a suggested answer and click <strong>Accept this answer</strong>.</li>
+          <li><strong>Nominate</strong> a teammate who can clarify a question.</li>
+          <li>Review what will be shared and click <strong>Send handoff</strong>.</li>
         </ol>
-        <p>From the draft, you can verify an answer, nominate someone who can help, and send the handoff.</p>
         {switchToManager&&<p>The demo opens in Shashank’s manager view so you can assign a task.</p>}
         <Button kind="primary" onClick={onStart}><Play size={15}/>Start demo</Button>
       </div>}
@@ -494,14 +500,14 @@ function DemoCoach({step,title,children,onClose,target,action}:{step:number;titl
       const control=document.getElementById(target);
       if(!control)return;
       const bounds=control.getBoundingClientRect();
-      if(bounds.top<0||bounds.bottom>window.innerHeight)control.scrollIntoView({block:'center',behavior:'auto'});
+      if(bounds.top<110||bounds.bottom>window.innerHeight-24)control.scrollIntoView({block:'center',behavior:'auto'});
       control.focus({preventScroll:true});
     });
     return ()=>cancelAnimationFrame(frame);
   },[target]);
-  return <aside className="demo-coach" aria-label="Task creation demo">
-    <div className="demo-coach-top"><span>Demo · Step {step} of 3</span><button type="button" className="icon-button" aria-label="Exit demo" onClick={onClose}><X size={14}/></button></div>
-    <div id="demo-coach-instruction" aria-live="polite"><h3>{title}</h3><p>{children}</p></div>
+  return <aside className="demo-coach" aria-label="Handoff demo">
+    <div className="demo-coach-top"><span>Demo · Step {step} of 6</span><button type="button" className="icon-button" aria-label="Exit demo" onClick={onClose}><X size={14}/></button></div>
+    <div id={demoInstruction} aria-live="polite"><h3>{title}</h3><p>{children}</p></div>
     {action&&<div className="demo-coach-action">{action}</div>}
   </aside>;
 }
@@ -546,7 +552,7 @@ function HomeSummary({s,me,rows,drafts,composer,open,onAssign,onOpenItems,histor
           <h2>Create a new task</h2>
           <p>Describe the work. Headstart predicts what your teammate may ask, drafts answers, and suggests people who can help.</p>
           {demoAssign&&<DemoCoach step={1} title="Open a new task" target="demo-assign" onClose={onStopDemo}>Click <strong>Assign new task</strong> to open the task form.</DemoCoach>}
-          <Button id="demo-assign" describedBy={demoAssign?'demo-coach-instruction':undefined} className={demoAssign?'demo-highlight':''} kind="primary" onClick={onAssign}><Plus size={24}/>Assign new task</Button>
+          <Button id="demo-assign" describedBy={demoAssign?demoInstruction:undefined} className={demoAssign?'demo-highlight':''} kind="primary" onClick={onAssign}><Plus size={24}/>Assign new task</Button>
         </div>
         <ol className="handoff-steps" aria-label="How Headstart works">
           <li><span><FileText size={17}/></span><div><strong>Add a task</strong><small>“Explain last week’s drop in search CTR.”</small></div></li>
@@ -604,7 +610,7 @@ function Assign({state,me,teammates,defaultAssignee,onBegin,reading,demoMode,com
       <div className="assignment-body">
         {globalError&&<div className="banner orange" role="alert">{globalError}</div>}
         <label className="field route-to"><span>Assigned to</span><div className="select-field"><Avatar p={recipient} small/><select value={recipient.id} onChange={e=>set({assigneeId:e.target.value})} aria-label="Assign to" disabled={reading}>{teammates.filter(p=>p.canReceive&&p.id!==me.id).map(p=><option key={p.id} value={p.id}>{p.name} · {roleLabel(p)}</option>)}</select><ChevronDown size={15}/></div></label>
-        <div className="field description-field"><label htmlFor="assignment-brief">What needs doing?</label><div className="editor"><textarea id="assignment-brief" placeholder="Describe the outcome you need and the context that matters." value={text} onChange={e=>set({text:e.target.value})} maxLength={5000} disabled={reading}/>{demo==='brief'&&<DemoCoach step={2} title="Add a task brief" target="demo-sample" onClose={onStopDemo} action={text.trim()&&<Button className="small" onClick={onDemoBrief}>Use this brief</Button>}>Keep or change the assignee above. Click <strong>Use sample task</strong> or write your own brief and choose <strong>Use this brief</strong>.</DemoCoach>}<div className="editor-tools"><Dictate context={me.teamId==='data'?'task':'growth'} onText={value=>set({text:value})} demoMode={useDemo}/><button id="demo-sample" aria-describedby={demo==='brief'?'demo-coach-instruction':undefined} className={`link-button ${demo==='brief'?'demo-highlight':''}`} type="button" onClick={()=>{set({text:example});if(demo==='brief')onDemoBrief();}} disabled={reading}><FileText size={14}/>Use sample task</button></div></div></div>
+        <div className="field description-field"><label htmlFor="assignment-brief">What needs doing?</label><div className="editor"><textarea id="assignment-brief" placeholder="Describe the outcome you need and the context that matters." value={text} onChange={e=>set({text:e.target.value})} maxLength={5000} disabled={reading}/>{demo==='brief'&&<DemoCoach step={2} title="Add a task brief" target="demo-sample" onClose={onStopDemo} action={text.trim()&&<Button className="small" onClick={onDemoBrief}>Use this brief</Button>}>Keep or change the assignee above. Click <strong>Use sample task</strong> or write your own brief and choose <strong>Use this brief</strong>.</DemoCoach>}<div className="editor-tools"><Dictate context={me.teamId==='data'?'task':'growth'} onText={value=>set({text:value})} demoMode={useDemo}/><button id="demo-sample" aria-describedby={demo==='brief'?demoInstruction:undefined} className={`link-button ${demo==='brief'?'demo-highlight':''}`} type="button" onClick={()=>{set({text:example});if(demo==='brief')onDemoBrief();}} disabled={reading}><FileText size={14}/>Use sample task</button></div></div></div>
         <div className="assignment-options">
           <label className="check-line"><input type="checkbox" checked={urgent} onChange={e=>set({urgent:e.target.checked})} disabled={reading}/><span><strong>Urgent delivery</strong><small>Notify the assignee immediately, even outside working hours.</small></span></label>
           <label className="aside-option"><input type="checkbox" checked={useDemo} onChange={e=>setUseDemo(e.target.checked)}/> Demo dictation</label>
@@ -612,7 +618,7 @@ function Assign({state,me,teammates,defaultAssignee,onBegin,reading,demoMode,com
         <div className="delivery-preview"><CalendarClock size={17}/><div><strong>{immediate?'Notify when sent':`Notification at ${dateTime(delivery)}`}</strong><small>{immediate?(`Available to ${recipient.name} immediately.`):`${recipient.name} can open the handoff when sent. Their notification waits until their next shift.`}</small></div></div>
       </div>
       {demo==='predict'&&<DemoCoach step={3} title="Predict clarifying questions" target="demo-predict" onClose={onStopDemo}>Click <strong>Predict questions</strong> to save the draft and see what your teammate might ask.</DemoCoach>}
-      <div className="assignment-footer"><span>{text.trim()&&<><Check size={14}/> Draft saved</>}</span><div className="row"><Button onClick={onClose} disabled={reading}>Close</Button><Button id="demo-predict" describedBy={demo==='predict'?'demo-coach-instruction':undefined} className={demo==='predict'?'demo-highlight':''} type="submit" kind="primary" disabled={!text.trim()||reading}>{reading?'Creating draft…':'Predict questions'}<ArrowRight size={16}/></Button></div></div>
+      <div className="assignment-footer"><span>{text.trim()&&<><Check size={14}/> Draft saved</>}</span><div className="row"><Button onClick={onClose} disabled={reading}>Close</Button><Button id="demo-predict" describedBy={demo==='predict'?demoInstruction:undefined} className={demo==='predict'?'demo-highlight':''} type="submit" kind="primary" disabled={!text.trim()||reading}>{reading?'Creating draft…':'Predict questions'}<ArrowRight size={16}/></Button></div></div>
     </form>
   </dialog>;
 }
@@ -724,6 +730,16 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
     void onPredict(settings,endpoint);
   }
   const toolbarDisabled=busy||predicting||revealing||confirming;
+  const hasDemoAnswer=demoReview&&active.some(q=>q.source==='predicted'&&q.answer);
+  const hasDemoNominee=demoReview&&active.some(q=>nomineeIdsFor(q).length>0);
+  const demoAnswer=demoReview&&!predicting&&!revealing&&!hasDemoAnswer
+    ?active.find(q=>q.source==='predicted'&&!q.answer&&(q.suggestedAnswer??suggestAnswer(t,q.text)))
+    :undefined;
+  const demoNomination=demoReview&&!predicting&&!revealing&&!demoAnswer&&!hasDemoNominee
+    ?active.find(q=>!q.answer)??active[0]
+    :undefined;
+  const demoSend=demoReview&&!predicting&&!revealing&&hasDemoAnswer&&hasDemoNominee;
+
   const unverifiedEdits=active.filter(q=>notes.answers[q.id]?.requiresVerification&&notes.answers[q.id]?.text?.trim()).length;
   const hasUnsavedForm=Boolean(notes.custom?.trim()||notes.customAnswer?.trim()||notes.customNominees?.length||active.some(q=>notes.extraAnswers?.[q.id]?.text.trim()));
   const [addingQuestion,setAddingQuestion]=useState(false);
@@ -743,7 +759,7 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
     setAdd(false);
     setNotes(prev=>({...prev,custom:undefined,customAnswer:undefined,customNominees:undefined}));
   }
-  const reviewQuestion=(q:Question,number:number,animateQuestion=false)=><ReviewQuestion key={q.id} number={number} animate={animateQuestion} q={q} s={s} t={t} act={act} demoMode={localDemo} edit={notes.answers[q.id]} onEdit={value=>editQuestion(q.id,value)} onSave={value=>saveQuestion(q.id,value)} onCancel={()=>clearEdit(q.id)} additionalDraft={notes.extraAnswers?.[q.id]} onAdditionalEdit={value=>editAdditional(q.id,value)} selectable={clarificationIds.includes(q.id)} selected={checked(q.id)} onSelect={()=>toggle(q.id)}/>;
+  const reviewQuestion=(q:Question,number:number,animateQuestion=false)=><ReviewQuestion key={q.id} number={number} animate={animateQuestion} q={q} s={s} t={t} act={act} demoMode={localDemo} edit={notes.answers[q.id]} onEdit={value=>editQuestion(q.id,value)} onSave={value=>saveQuestion(q.id,value)} onCancel={()=>clearEdit(q.id)} additionalDraft={notes.extraAnswers?.[q.id]} onAdditionalEdit={value=>editAdditional(q.id,value)} selectable={clarificationIds.includes(q.id)} selected={checked(q.id)} onSelect={()=>toggle(q.id)} demoAction={q.id===demoAnswer?.id?'answer':q.id===demoNomination?.id?'nominate':undefined} onStopDemo={onStopDemo}/>;
   return <>
     <button className="link-button back" onClick={goBack}><ArrowLeft size={15}/>Open items</button>
     <Title title="Task draft" description="Verify suggested answers and choose who can help before sending."><span className="saved-stamp"><Check size={15}/> Saved in Open items</span></Title>
@@ -762,10 +778,8 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
             </div>
             <div className="row spread wrap"><p aria-live="polite">{predicting?'Finding questions, answers, and nominees…':revealing?`Finding questions · ${visible} of ${total}`:`${predictions.filter(q=>q.status!=='removed').length} predicted · ${done} of ${active.length} in review addressed`}</p></div>
           </div>
-          {demoReview&&<DemoCoach step={3} title={predicting||revealing?'Finding likely questions':'Your task draft is ready'} onClose={onStopDemo}
-            action={!predicting&&!revealing&&<Button kind="primary" className="small" onClick={onStopDemo}>Finish demo</Button>}>
-            {predicting||revealing?'Watch the questions appear below.':total?'Review the questions below. You can verify an answer or nominate someone before you send the handoff.':<>Use <strong>Predict questions</strong> above to retry, or return to <strong>Open items</strong> to resume later.</>}
-          </DemoCoach>}
+          {demoReview&&(predicting||revealing)&&<DemoCoach step={3} title="Finding likely questions" onClose={onStopDemo}>Watch the questions appear below.</DemoCoach>}
+          {demoReview&&!predicting&&!revealing&&!total&&<DemoCoach step={3} title="Try predicting questions again" onClose={onStopDemo}>Use <strong>Predict questions</strong> above to retry. Your draft is saved in <strong>Open items</strong>.</DemoCoach>}
           {(predicting||revealing)&&<div className={`prediction-meter ${predicting?'scanning':''}`} role="progressbar" aria-label="Predicting questions" aria-valuemax={total||undefined} aria-valuenow={predicting?undefined:visible}><span style={{width:predicting?undefined:`${visible/total*100}%`}}/></div>}
           {predicting&&visible===0&&<div className="prediction-placeholder" aria-hidden="true"><span/><span/><span/></div>}
           {moreMessage&&!predicting&&!revealing&&<p className="prediction-result" role="status">{moreMessage}</p>}
@@ -801,7 +815,7 @@ function Review({s,t,act,onSend,goBack,started,busy,demoMode,predicting,animate,
         {!predicting&&!revealing&&libraryToReview.length>0&&<LibraryMatches s={s} matches={libraryToReview} act={act} bulk={bulk('library',libraryIds)} selected={checked} onSelect={toggle} onConfirm={id=>bulkConfirm('library',[id])} confirming={confirming}/>}
       </div>
       <aside className="review-aside">
-        <section className="delivery-route send-route" id="handoff-send"><div className="route-heading"><span className="eyebrow"><Send size={15}/> Handoff preview</span><span>{dateLabel(delivery)}</span></div><div className="send-route-body"><span className="eyebrow">To {receiver.name}</span><strong>{wait?<>{shortTime(delivery)} <small>IST</small></>:'When sent'}</strong><p>{wait?`${receiver.name} can open the handoff immediately. Their notification is scheduled for their next shift.`:t.urgent?'Your teammate can open the handoff and will be notified immediately.':'Your teammate is on shift and can see the task immediately.'}</p>{(unresolved>0||libraryIds.length>0)&&<p className="unverified-note">Unused suggestions are automatically left out.</p>}{hasUnsavedForm&&<p className="unverified-note">Confirm any new questions or extra answers you want included before sending.</p>}{unverifiedEdits>0&&<p className="unverified-note">{unverifiedEdits} edited {unverifiedEdits===1?'suggestion requires':'suggestions require'} verification to be included.</p>}</div><div className="send-route-footer"><Button kind="primary" onClick={onSend} disabled={toolbarDisabled||addingQuestion||changingAssignee}><Send size={16}/>{busy?'Sending…':'Send handoff'}</Button><Button kind="plain" onClick={goBack}>Finish later</Button></div></section>
+        <section className="delivery-route send-route" id="handoff-send"><div className="route-heading"><span className="eyebrow"><Send size={15}/> Handoff preview</span><span>{dateLabel(delivery)}</span></div><div className="send-route-body"><span className="eyebrow">To {receiver.name}</span><strong>{wait?<>{shortTime(delivery)} <small>IST</small></>:'When sent'}</strong><p>{wait?`${receiver.name} can open the handoff immediately. Their notification is scheduled for their next shift.`:t.urgent?'Your teammate can open the handoff and will be notified immediately.':'Your teammate is on shift and can see the task immediately.'}</p>{(unresolved>0||libraryIds.length>0)&&<p className="unverified-note">Unused suggestions are automatically left out.</p>}{hasUnsavedForm&&<p className="unverified-note">Confirm any new questions or extra answers you want included before sending.</p>}{unverifiedEdits>0&&<p className="unverified-note">{unverifiedEdits} edited {unverifiedEdits===1?'suggestion requires':'suggestions require'} verification to be included.</p>}</div>{demoSend&&<DemoCoach step={6} title="Send the handoff" target="demo-send" onClose={onStopDemo}>Your accepted answer and nominee will be shared. You can confirm other clarifying questions too. Click <strong>Send handoff</strong> when you’re ready.</DemoCoach>}<div className="send-route-footer"><Button id="demo-send" describedBy={demoSend?demoInstruction:undefined} className={demoSend?'demo-highlight':''} kind="primary" onClick={onSend} disabled={toolbarDisabled||addingQuestion||changingAssignee}><Send size={16}/>{busy?'Sending…':'Send handoff'}</Button><Button kind="plain" onClick={goBack}>Finish later</Button></div></section>
         <div className="review-preferences"><span className="timer"><Clock3 size={14}/> Time on task <strong>{Math.floor(elapsed/60)}m {String(elapsed%60).padStart(2,'0')}s</strong></span><label className="aside-option"><input type="checkbox" checked={localDemo} onChange={e=>setLocalDemo(e.target.checked)}/> Demo dictation</label></div>
       </aside>
     </div>
@@ -833,13 +847,13 @@ function nominationCandidates(s:State,t:Task){
 function toggleId(ids:string[],id:string){
   return ids.includes(id)?ids.filter(value=>value!==id):[...ids,id];
 }
-function NomineePicker({id,people,selected,disabled,onToggle}:{id?:string;people:Person[];selected:string[];disabled?:boolean;onToggle:(id:string)=>void}){
+function NomineePicker({id,people,selected,disabled,onToggle,demoTarget}:{id?:string;people:Person[];selected:string[];disabled?:boolean;onToggle:(id:string)=>void;demoTarget?:boolean}){
   return <fieldset id={id} className="nominee-picker" disabled={disabled}>
     <legend>Nominate teammates</legend>
-    {people.length?<div className="nominee-options">{people.map(p=><label key={p.id}><input type="checkbox" checked={selected.includes(p.id)} onChange={()=>onToggle(p.id)}/><span>{p.name}</span></label>)}</div>:<p>No other teammates are available for nomination.</p>}
+    {people.length?<div className="nominee-options">{people.map((p,index)=><label key={p.id} className={demoTarget&&index===0?'demo-highlight':undefined}><input id={demoTarget&&index===0?'demo-pick-nominee':undefined} aria-describedby={demoTarget&&index===0?demoInstruction:undefined} type="checkbox" checked={selected.includes(p.id)} onChange={()=>onToggle(p.id)}/><span>{p.name}</span></label>)}</div>:<p>No other teammates are available for nomination.</p>}
   </fieldset>;
 }
-function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,onCancel,additionalDraft,onAdditionalEdit,selectable,selected,onSelect}:{q:Question;s:State;t:Task;act:Act;demoMode:boolean;number:number;animate?:boolean;edit?:ContextDraft;onEdit:(value:ContextDraft)=>void;onSave:(value:ContextDraft)=>Promise<unknown>;onCancel:()=>void;additionalDraft?:AdditionalAnswerDraft;onAdditionalEdit:(value?:AdditionalAnswerDraft)=>void;selectable:boolean;selected:boolean;onSelect:()=>void}){
+function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,onCancel,additionalDraft,onAdditionalEdit,selectable,selected,onSelect,demoAction,onStopDemo}:{q:Question;s:State;t:Task;act:Act;demoMode:boolean;number:number;animate?:boolean;edit?:ContextDraft;onEdit:(value:ContextDraft)=>void;onSave:(value:ContextDraft)=>Promise<unknown>;onCancel:()=>void;additionalDraft?:AdditionalAnswerDraft;onAdditionalEdit:(value?:AdditionalAnswerDraft)=>void;selectable:boolean;selected:boolean;onSelect:()=>void;demoAction?:'answer'|'nominate';onStopDemo:()=>void}){
   const [editing,setEditing]=useState(false);
   const [saving,setSaving]=useState(false);
   const [nominationOpen,setNominationOpen]=useState(false);
@@ -851,6 +865,11 @@ function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,on
   const suggestedPerson=choices.find(p=>p.id===suggestedId);
   const context=/output|format/i.test(q.text)?'output':/priority|other tasks/i.test(q.text)?'priority':/definition/i.test(q.text)?'definition':'answer';
   const isOpen=editing||edit?.text!==undefined;
+  const demoAccept=demoAction==='answer'&&!isOpen;
+  const demoPick=demoAction==='nominate'&&nominationOpen;
+  const demoSuggested=demoAction==='nominate'&&!nominationOpen&&Boolean(suggestedPerson);
+  const demoOpenPicker=demoAction==='nominate'&&!nominationOpen&&!suggestedPerson;
+
   const text=edit?.text??q.answer??'';
   const currentNominees=nomineeIdsFor(q);
   const nominees=edit?.nomineeIds??(edit?.nomineeId!==undefined?(edit.nomineeId?[edit.nomineeId]:[]):currentNominees);
@@ -891,19 +910,23 @@ function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,on
       <div className="row spread align-top"><div><h3>{selectable&&<input type="checkbox" aria-label={`Select clarification answer for ${q.text}`} checked={selected} onChange={onSelect}/>} {q.text}</h3>{q.reason&&<p className="reason">{q.reason}</p>}</div><button type="button" className="remove-link" onClick={()=>void act(path+'/remove')}><X size={13}/> Remove from question set</button></div>
 
       <div className="question-nominations">
+        {demoAction==='nominate'&&<DemoCoach step={5} title="Choose someone who can clarify" target={demoPick?'demo-pick-nominee':demoSuggested?'demo-nominate-suggested':'demo-open-nominees'} onClose={onStopDemo}>
+          {demoPick?'Select a teammate to add them as a person the assignee can ask.':demoSuggested?<>Click <strong>{suggestedPerson?.name}</strong> to add the suggested nominee, or click <strong>Nominate</strong> to choose someone else.</>:<>Click <strong>Nominate</strong> and pick a teammate who can help.</>}
+        </DemoCoach>}
         <div className="nomination-row">
           <strong><Users size={15}/> Nominees</strong>
           {nominees.map(id=>{
             const name=getPersona(s,id).name;
             return <span className="chip human nominee-chip" key={id}>{name}<button type="button" aria-label={`Remove ${name} from nominees`} disabled={savingNominees} onClick={()=>void toggleNominee(id)}><X size={13}/></button></span>;
           })}
-          {suggestedPerson&&!nominees.includes(suggestedPerson.id)&&<button type="button" className="suggested-person" aria-label={`Nominate ${suggestedPerson.name}, suggested by Headstart`} onClick={()=>void toggleNominee(suggestedPerson.id)} disabled={savingNominees}><Sparkles size={13}/>{suggestedPerson.name}<small>Suggested</small><Plus size={13}/></button>}
-          <button type="button" className="button small" onClick={()=>setNominationOpen(!nominationOpen)} aria-expanded={nominationOpen} aria-controls={nominationOpen?`nominees-${q.id}`:undefined}><Plus size={14}/>Nominate</button>
+          {suggestedPerson&&!nominees.includes(suggestedPerson.id)&&<button type="button" id={demoSuggested?'demo-nominate-suggested':undefined} aria-describedby={demoSuggested?demoInstruction:undefined} className={`suggested-person ${demoSuggested?'demo-highlight':''}`} aria-label={`Nominate ${suggestedPerson.name}, suggested by Headstart`} onClick={()=>void toggleNominee(suggestedPerson.id)} disabled={savingNominees}><Sparkles size={13}/>{suggestedPerson.name}<small>Suggested</small><Plus size={13}/></button>}
+          <button type="button" id={demoOpenPicker?'demo-open-nominees':undefined} aria-describedby={demoOpenPicker?demoInstruction:undefined} className={`button small ${demoOpenPicker?'demo-highlight':''}`} onClick={()=>setNominationOpen(!nominationOpen)} aria-expanded={nominationOpen} aria-controls={nominationOpen?`nominees-${q.id}`:undefined}><Plus size={14}/>Nominate</button>
         </div>
-        {nominationOpen&&<NomineePicker id={`nominees-${q.id}`} people={choices} selected={nominees} disabled={savingNominees} onToggle={id=>void toggleNominee(id)}/>}
+        {nominationOpen&&<NomineePicker id={`nominees-${q.id}`} people={choices} selected={nominees} demoTarget={demoPick} disabled={savingNominees} onToggle={id=>void toggleNominee(id)}/>}
       </div>
 
       <div className="question-answers">
+        {demoAction==='answer'&&<DemoCoach step={4} title="Check a suggested answer" target={demoAccept?'demo-accept-answer':undefined} onClose={onStopDemo}>Read the answer, then click <strong>Accept this answer</strong> if it fits. You can also edit and save it.</DemoCoach>}
         {q.answer&&!isOpen&&<section className="context-suggestion approved-answer">
           <div className="row spread wrap"><h4><Check size={14}/> Answer 1</h4><div className="row wrap"><span className="answer-provenance">{q.verifiedSuggestion?'Approved by you':'Added by you'}</span><button type="button" className="link-button" aria-label="Edit answer 1" disabled={Boolean(additionalDraft)} onClick={()=>setEditing(true)}>Edit</button></div></div>
           <p>{q.answer}</p>
@@ -911,7 +934,7 @@ function ReviewQuestion({q,s,t,act,demoMode,number,animate,edit,onEdit,onSave,on
         {suggestion&&!q.answer&&!isOpen&&<section className="context-suggestion suggested-answer">
           <div className="row spread wrap"><h4><Sparkles size={14}/> System-suggested answer</h4><span className="verification-status">Needs your approval</span></div>
           <p>{suggestion}</p>
-          <div className="row wrap"><Button className="small" onClick={()=>void savePrimary({text:suggestion,verifySuggested:true})} disabled={saving}><Check size={14}/>Accept this answer</Button><button type="button" className="link-button" onClick={()=>{onEdit({text:suggestion,requiresVerification:true});setEditing(true);}}>Edit</button></div>
+          <div className="row wrap"><Button id={demoAccept?'demo-accept-answer':undefined} describedBy={demoAccept?demoInstruction:undefined} className={`small ${demoAccept?'demo-highlight':''}`} onClick={()=>void savePrimary({text:suggestion,verifySuggested:true})} disabled={saving}><Check size={14}/>Accept this answer</Button><button type="button" className="link-button" onClick={()=>{onEdit({text:suggestion,requiresVerification:true});setEditing(true);}}>Edit</button></div>
         </section>}
         {isOpen&&<form className="inline-context" onSubmit={e=>{e.preventDefault();if(canSave&&!saving)void savePrimary({text,verifySuggested:edit?.requiresVerification===true});}}>
           <div className="field"><label htmlFor={`answer-${q.id}`}>Answer 1</label><div className="editor context-editor"><textarea id={`answer-${q.id}`} rows={3} placeholder="Give your teammate a starting point…" value={text} onChange={e=>onEdit({text:e.target.value,requiresVerification:edit?.requiresVerification||q.verifiedSuggestion})}/><div className="editor-tools"><Dictate context={context} demoMode={demoMode} onText={value=>onEdit({text:value,requiresVerification:edit?.requiresVerification||q.verifiedSuggestion})}/></div></div></div>
